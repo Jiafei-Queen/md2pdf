@@ -33,6 +33,7 @@
     const workspace       = $('.workspace');
     const fullscreenBtn   = $('#fullscreenBtn');
     const exportImageBtn  = $('#exportImageBtn');
+    const exportImagePagesBtn = $('#exportImagePagesBtn');
     const shareBtn        = $('#shareBtn');
     const findPanel       = $('#findPanel');
     const findInput       = $('#findInput');
@@ -76,6 +77,8 @@
             download: 'Download',
             tabSkill: 'Skill', tabApi: 'API',
             generatingPdf: 'Generating PDF...',
+            exportImagePages: 'Images (A4)', imgPaging: 'Generating page images...', imgZipped: 'Downloaded {n} page images',
+            generatingHtml: 'Generating HTML...', sharing: 'Creating link...',
             dropHere: 'Drop your <strong>.md</strong> file here',
             emptyPreview: 'Start typing to see the preview...',
             words: 'words', minRead: 'min',
@@ -120,6 +123,8 @@
             download: 'Descargar',
             tabSkill: 'Skill', tabApi: 'API',
             generatingPdf: 'Generando PDF...',
+            exportImagePages: 'Imágenes (páginas A4)', imgPaging: 'Generando imágenes...', imgZipped: '{n} imágenes descargadas',
+            generatingHtml: 'Generando HTML...', sharing: 'Creando enlace...',
             dropHere: 'Suelta tu archivo <strong>.md</strong> aqui',
             emptyPreview: 'Empieza a escribir para ver la vista previa...',
             words: 'palabras', minRead: 'min',
@@ -180,6 +185,7 @@ Follow those instructions exactly.
         $('#exportPDFPagesBtn').lastChild.textContent = ' ' + t('exportPdfPages');
         $('#exportHTMLBtn').lastChild.textContent = ' ' + t('exportHtml');
         $('#exportImageBtn').lastChild.textContent = ' ' + t('exportImage');
+        $('#exportImagePagesBtn').lastChild.textContent = ' ' + t('exportImagePages');
         $('#shareBtn').lastChild.textContent = ' ' + t('shareLink');
 
         // Templates
@@ -204,7 +210,6 @@ Follow those instructions exactly.
         $('#customCSS').placeholder = t('customCssPlaceholder');
         $('#dropOverlay .drop-content p').innerHTML = t('dropHere');
         $('.export-modal p').textContent = t('generatingPdf');
-
         // Share modal
         $('#shareModalTitle').textContent = t('linkCreated');
         $('#apiModalTitle').textContent = t('apiPrompts');
@@ -1656,26 +1661,43 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         return css;
     }
 
-    function isCurrentStyleDark() {
-        return STYLES[currentStyle]?.dark === true;
+    // The UI has two independent notions of "dark": the app-level theme
+    // toggle (data-theme="dark" on <html>) and styles that are dark by
+    // definition (Dracula, Terminal). Exports render into a fresh document
+    // that has no data-theme attribute, so both must be resolved here and
+    // carried over explicitly — otherwise a dark UI exports as light.
+    function resolveExportTheme() {
+        const style = STYLES[currentStyle] || STYLES.notion;
+        const appDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const dark = appDark || style.dark === true;
+        // Prefer the preview's real painted background over the style's static
+        // value: it already accounts for the theme toggle.
+        const previewBg = getComputedStyle(preview).backgroundColor;
+        const bg = (previewBg && previewBg !== 'rgba(0, 0, 0, 0)' && previewBg !== 'transparent')
+            ? previewBg
+            : (style.bg || (dark ? '#0d1117' : '#ffffff'));
+        return { style, dark, appDark, bg, fg: dark ? '#e6edf3' : '#1f2328' };
+    }
+
+    // Set the export overlay's message for the format being produced.
+    function setExportStatus(key) {
+        const p = document.querySelector('.export-modal p');
+        if (p) p.textContent = t(key);
     }
 
     async function exportPDF(paginated) {
         const btnLabel = exportBtn.querySelector('span');
         exportBtn.classList.add('loading');
         if (btnLabel) btnLabel.textContent = 'Preparing...';
+        setExportStatus('generatingPdf');
         exportOverlay.classList.add('active');
 
         try {
-            const style    = STYLES[currentStyle] || STYLES.notion;
-            const dark     = style.dark;
+            const { style, dark, bg: bodyBg, fg: bodyFg, appDark } = resolveExportTheme();
             const css      = await fetchPrintCSS(dark);
             const styleCSS = getStyleCSSForPrint();
             const userCSS  = customCSSInput.value || '';
             const content  = preview.innerHTML;
-
-            const bodyBg = style.bg;
-            const bodyFg = dark ? '#e6edf3' : '#1f2328';
 
             // Margins always live on <body>, never on @page. A background only
             // paints inside the content box, so @page margins leave the margin
@@ -1708,7 +1730,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
             const doc = iframe.contentDocument;
             doc.open();
             doc.write(`<!DOCTYPE html>
-<html>
+<html data-theme="${appDark ? 'dark' : 'light'}">
 <head>
 <meta charset="UTF-8">
 <title> </title>
@@ -1805,19 +1827,15 @@ ${pageBreakCSS}.markdown-body pre { white-space: pre-wrap; word-wrap: break-word
     // ── HTML Export ──────────────────────────────────
 
     async function exportHTML() {
-        const style    = STYLES[currentStyle] || STYLES.notion;
-        const dark     = style.dark;
+        const { style, dark, bg: bodyBg, fg: bodyFg, appDark } = resolveExportTheme();
         const css      = await fetchPrintCSS(dark);
         const styleCSS = getStyleCSSForPrint();
         const userCSS  = customCSSInput.value || '';
         const content  = preview.innerHTML;
         const title    = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '');
 
-        const bodyBg = style.bg;
-        const bodyFg = dark ? '#e6edf3' : '#1f2328';
-
         const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="${appDark ? 'dark' : 'light'}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1953,6 +1971,438 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         });
     }
 
+    // ── Export Image Pages (A4) ──────────────────────
+    //
+    // Screenshots are taken from our own DOM, not from the print engine, so
+    // page breaks must be computed here. window.print() returns undefined and
+    // exposes no page boundaries, so we measure the laid-out content, pack it
+    // into fixed A4 pages, then rasterise each page separately.
+    //
+    // Break rules mirror the paginated PDF export:
+    //   - headings never strand at the bottom of a page (keep-with-next)
+    //   - a split paragraph keeps >= ORPHAN_LINES above / WIDOW_LINES below
+    //   - blocks taller than a page are placed whole and clip
+    //   - table headers repeat on every continuation page
+
+    const A4_W = 794, A4_H = 1123;                                  // 210x297mm @96dpi
+    const PAGE_PAD = { top: 68, right: 61, bottom: 68, left: 61 };   // 18mm / 16mm
+    const PAGE_INNER_W = A4_W - PAGE_PAD.left - PAGE_PAD.right;
+    const PAGE_INNER_H = A4_H - PAGE_PAD.top - PAGE_PAD.bottom;
+
+    const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+    const ORPHAN_LINES = 2, WIDOW_LINES = 2;
+    // Space a heading must leave for following content before it may sit at the
+    // bottom of a page. Two text lines' worth.
+    const MIN_FOLLOW_H = 48;
+
+    // A unit of content that can be placed on a page. `nodes` are live DOM
+    // elements; `owner` is the source element the atoms came from, so a run
+    // never merges rows from two different tables or lists; `tableHead` is
+    // cloned onto every page of a split table.
+    function makeAtom(elements, opts = {}) {
+        return {
+            nodes: elements,
+            owner: opts.owner || null,
+            kind: opts.kind || 'block',       // block | listChunk | tableChunk
+            keepWithNext: opts.keepWithNext !== false,
+            tableHead: opts.tableHead || null,
+        };
+    }
+
+    // A code listing taller than a page is split into per-page chunks. Works on
+    // the plain text and re-highlights each chunk, which is far more robust
+    // than slicing rendered markup: highlight.js emits a tree of nested spans
+    // that do not align with line boundaries.
+    function splitOversized(el, stage) {
+        const pre = el.tagName === 'PRE' ? el : el.querySelector(':scope > pre');
+        if (!pre) return null;
+        const wrapper = pre.closest('.code-block-wrapper') || pre.parentElement;
+        const lines = pre.textContent.replace(/\n$/, '').split('\n');
+        if (lines.length < 8) return null;
+
+        const codeEl = pre.querySelector('code');
+        const lang = (codeEl?.className.match(/language-([\w-]+)/) || [])[1]
+                  || (pre.parentElement?.querySelector('.code-lang')?.textContent || '').trim()
+                  || null;
+
+        // Measure a single line to learn the usable line count per page.
+        const probe = buildCodeChunk(wrapper, pre, codeEl, ['x'], lang);
+        Object.assign(probe.style, {
+            position: 'absolute', visibility: 'hidden', left: '-99999px', top: '0',
+            width: PAGE_INNER_W + 'px',
+        });
+        stage.appendChild(probe);
+        const oneLine = probe.getBoundingClientRect().height;
+        stage.removeChild(probe);
+        if (!(oneLine > 0)) return null;
+
+        const capacity = Math.max(4, Math.floor(PAGE_INNER_H / oneLine) - 1);
+        if (lines.length <= capacity) return null;
+
+        const out = [];
+        for (let i = 0; i < lines.length; i += capacity) {
+            out.push(buildCodeChunk(wrapper, pre, codeEl, lines.slice(i, i + capacity), lang, i > 0));
+        }
+        return out;
+    }
+
+    // Build one page-sized copy of a code block holding `lines`. The first
+    // chunk keeps the rounded top corners; continuation chunks lose the top
+    // radius and border so the split reads as one continuous listing.
+    function buildCodeChunk(wrapper, pre, codeEl, lines, lang, cont) {
+        const w = wrapper.cloneNode(false);
+        const p = document.createElement('pre');
+        p.className = pre.className;
+        const c = document.createElement('code');
+        if (codeEl) c.className = codeEl.className;
+        const text = lines.join('\n');
+        c.innerHTML = highlightChunk(text, lang);
+        p.appendChild(c);
+        w.appendChild(p);
+        if (cont) {
+            // Square off the seam and cancel the vertical padding/margin the
+            // <pre> adds, so consecutive chunks read as one continuous listing
+            // with no blank band at the page break.
+            w.style.marginTop = '-16px';
+            const firstPre = w.querySelector('pre');
+            if (firstPre) {
+                firstPre.style.borderTopLeftRadius = '0';
+                firstPre.style.borderTopRightRadius = '0';
+                firstPre.style.paddingTop = '0';
+                firstPre.style.marginTop = '0';
+            }
+        }
+        return w;
+    }
+
+    function highlightChunk(text, lang) {
+        const escaped = text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+        try {
+            if (window.hljs) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(text, { language: lang }).value;
+                }
+                return hljs.highlightAuto(text).value;
+            }
+        } catch (e) { /* fall back to escaped text */ }
+        return escaped;
+    }
+
+    // Break the article into atoms. Lists and large tables become several
+    // atoms so they can flow across pages; everything else stays whole.
+    function buildAtoms(root, stage) {
+        const atoms = [];
+        for (const el of Array.from(root.children)) {
+            if (el.tagName === 'UL' || el.tagName === 'OL') {
+                const items = Array.from(el.children).filter(c => c.tagName === 'LI');
+                if (items.length > ORPHAN_LINES + WIDOW_LINES) {
+                    for (let i = 0; i < items.length; i += ORPHAN_LINES) {
+                        atoms.push(makeAtom(items.slice(i, i + ORPHAN_LINES), { kind: 'listChunk', owner: el }));
+                    }
+                } else {
+                    atoms.push(makeAtom([el]));
+                }
+                continue;
+            }
+            if (el.tagName === 'TABLE') {
+                const tbody = el.querySelector(':scope > tbody');
+                const rows  = tbody ? Array.from(tbody.children).filter(c => c.tagName === 'TR') : [];
+                if (rows.length > ORPHAN_LINES + WIDOW_LINES) {
+                    const head = el.querySelector(':scope > thead');
+                    const cloneHead = head ? head.cloneNode(true) : null;
+                    for (let i = 0; i < rows.length; i += 1) {
+                        atoms.push(makeAtom(rows.slice(i, i + 1), {
+                            kind: 'tableChunk',
+                            owner: el,
+                            tableHead: cloneHead,
+                        }));
+                    }
+                } else {
+                    atoms.push(makeAtom([el]));
+                }
+                continue;
+            }
+            // Code listings that span more than a page are pre-split into
+            // line groups so they flow across pages like any other block.
+            const parts = splitOversized(el, stage);
+            if (parts && parts.length > 1) {
+                for (const part of parts) atoms.push(makeAtom([part], { kind: 'codeChunk' }));
+                continue;
+            }
+            atoms.push(makeAtom([el]));
+        }
+        return atoms;
+    }
+
+    function newPageEl(stage, bg) {
+        const el = document.createElement('div');
+        // Pages must carry the same class as the preview so style-scoped rules
+        // (.markdown-body table, .markdown-body pre, ...) still apply. The
+        // clone inside is the real article; this wrapper only supplies the
+        // scope and the A4 box.
+        el.className = 'markdown-body md2pdf-page';
+        Object.assign(el.style, {
+            boxSizing: 'border-box', width: A4_W + 'px', height: A4_H + 'px',
+            padding: `${PAGE_PAD.top}px ${PAGE_PAD.right}px ${PAGE_PAD.bottom}px ${PAGE_PAD.left}px`,
+            overflow: 'hidden', background: bg, margin: '0 auto 20px',
+            maxWidth: 'none', minHeight: '0',
+        });
+        stage.appendChild(el);
+        return el;
+    }
+
+    // Merge a run of same-kind atoms into the single element appended to a page,
+    // so table borders, column widths and list bullets stay continuous.
+    function mergeRun(kind, run) {
+        if (kind === 'tableChunk') return packTableRun(run);
+        if (kind === 'listChunk') return packListRun(run);
+        return run[0].nodes[0].cloneNode(true);
+    }
+
+    // Build a standalone node for one atom that has no run-mates.
+    function renderAtom(atom) {
+        if (atom.kind === 'listChunk') return packListRun([atom]);
+        if (atom.kind === 'tableChunk') return packTableRun([atom]);
+        const node = atom.nodes[0].cloneNode(true);
+        node.removeAttribute('id');
+        return node;
+    }
+
+    // Group a run of consecutive table-row atoms into a single <table> that
+    // spans the remainder of the page. Without this every row would render as
+    // its own one-row table, losing the shared borders and column widths.
+    function packTableRun(run) {
+        const src = run[0].nodes[0].closest('table');
+        const t = src.cloneNode(false);
+        t.removeAttribute('id');
+        if (run[0].tableHead) t.appendChild(run[0].tableHead.cloneNode(true));
+        const tbody = document.createElement('tbody');
+        for (const atom of run) {
+            for (const row of atom.nodes) tbody.appendChild(row.cloneNode(true));
+        }
+        t.appendChild(tbody);
+        const tfoot = src.querySelector(':scope > tfoot');
+        if (tfoot) t.appendChild(tfoot.cloneNode(true));
+        return t;
+    }
+
+    // Same idea for list chunks: one <ul>/<ol> per page, not one per 2 items.
+    function packListRun(run) {
+        const list = document.createElement(run[0].nodes[0].parentElement.tagName.toLowerCase());
+        list.removeAttribute('id');
+        for (const atom of run) {
+            for (const li of atom.nodes) list.appendChild(li.cloneNode(true));
+        }
+        return list;
+    }
+
+    /**
+     * Pack atoms into A4 pages appended to `stage`.
+     *
+     * Fit is decided by actually appending the candidate node and measuring
+     * the page, then rolling back when it does not fit. Predicting heights in a
+     * detached holder is unreliable here because margins collapse, list
+     * spacing depends on the wrapper, and styles resolve against the real page
+     * context. A node too tall for even an empty page is placed anyway and
+     * clipped by the page box, so no content is ever dropped.
+     */
+    function paginateIntoPages(atoms, stage, bg) {
+        const pages = [];
+        const newPage = () => { const p = newPageEl(stage, bg); pages.push(p); return p; };
+        if (!atoms.length) { newPage(); return pages; }
+
+        let page = newPage();
+
+        const usedOn = (pg) => {
+            const last = pg.lastElementChild;
+            if (!last) return 0;
+            const cs = getComputedStyle(pg);
+            const top = pg.getBoundingClientRect().top + (parseFloat(cs.paddingTop) || 0);
+            return last.getBoundingClientRect().bottom - top;
+        };
+
+        // Try to append `node` to `pg`; roll back and return false if it does
+        // not fit. When `allowOverflow` is set the node is kept regardless.
+        const tryPlace = (pg, node, allowOverflow) => {
+            pg.appendChild(node);
+            if (allowOverflow || usedOn(pg) <= PAGE_INNER_H) return true;
+            pg.removeChild(node);
+            return false;
+        };
+
+        for (let i = 0; i < atoms.length; i++) {
+            const atom = atoms[i];
+
+            if (atom.kind === 'tableChunk' || atom.kind === 'listChunk') {
+                // Consume every remaining atom of this kind, filling as many
+                // pages as needed. Each page gets one merged table/list so
+                // borders, column widths and bullets stay continuous, instead
+                // of the run being fragmented into many small pieces.
+                let run = [atom];
+                let node = mergeRun(atom.kind, run);
+                if (!tryPlace(page, node, false)) {
+                    if (usedOn(page) > 0) page = newPage();
+                    page.appendChild(node);
+                }
+
+                let consumed = 1;
+                for (let j = i + 1; j < atoms.length
+                     && atoms[j].kind === atom.kind
+                     && atoms[j].owner === atom.owner; j++) {
+                    const trial = mergeRun(atom.kind, run.concat([atoms[j]]));
+                    page.appendChild(trial);
+                    if (usedOn(page) <= PAGE_INNER_H) {
+                        page.removeChild(node);
+                        run.push(atoms[j]);
+                        node = trial;
+                        consumed++;
+                        continue;
+                    }
+                    page.removeChild(trial);
+                    // This page is full: start the next one and keep going.
+                    page = newPage();
+                    const nextRun = [atoms[j]];
+                    const nextNode = mergeRun(atom.kind, nextRun);
+                    page.appendChild(nextNode);
+                    run = nextRun;
+                    node = nextNode;
+                    consumed++;
+                }
+                i += consumed - 1;
+                continue;
+            }
+
+            const node = renderAtom(atom);
+            const isHeading = HEADINGS.has(atom.nodes[0].tagName);
+
+            // Place, rolling back to a fresh page when the current one is full.
+            // A node taller than a whole page can never fit anywhere: place it
+            // anyway and let the page box clip it, so content is never dropped
+            // silently. The forced retry also covers the oversized case, where
+            // even the fresh page cannot take it. Same rule for table/list runs.
+            if (!tryPlace(page, node, false)) {
+                if (usedOn(page) > 0) page = newPage();
+                tryPlace(page, node, true);
+            }
+
+            // Keep-with-next: a heading must not be left at the foot of a page
+            // with no content under it.
+            if (isHeading && atoms[i + 1]) {
+                if (usedOn(page) + MIN_FOLLOW_H > PAGE_INNER_H) {
+                    page.removeChild(node);
+                    page = newPage();
+                    page.appendChild(node);
+                }
+            }
+        }
+
+        return pages;
+    }
+
+    async function exportImagePages() {
+        const btnLabel = exportBtn.querySelector('span');
+        exportBtn.classList.add('loading');
+        if (btnLabel) btnLabel.textContent = t('imgPaging');
+        setExportStatus('imgPaging');
+        exportOverlay.classList.add('active');
+
+        let iframe = null;
+        try {
+            const { dark, bg: bodyBg, fg: bodyFg, appDark } = resolveExportTheme();
+            const css   = await fetchPrintCSS(dark);
+            const styleCSS = getStyleCSSForPrint();
+            const userCSS  = customCSSInput.value || '';
+            const content  = preview.innerHTML;
+
+            iframe = document.createElement('iframe');
+            iframe.style.cssText = 'position:fixed;left:-20000px;top:0;width:' + A4_W + 'px;height:' + A4_H + 'px;border:0;opacity:0;pointer-events:none;';
+            document.body.appendChild(iframe);
+
+            const doc = iframe.contentDocument;
+            doc.open();
+            doc.write(`<!DOCTYPE html>
+<html data-theme="${appDark ? 'dark' : 'light'}">
+<head>
+<meta charset="UTF-8">
+<title> </title>
+<style>${css}</style>
+<style>${styleCSS}</style>
+<style>${userCSS}</style>
+<style>
+html, body { margin: 0; padding: 0; background: ${bodyBg} !important; color: ${bodyFg};
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+body { width: ${PAGE_INNER_W}px; }
+.markdown-body { max-width: none; margin: 0; padding: 0; }
+/* Pages are .markdown-body themselves so style-scoped rules apply. Reset the
+   preview's own box model and re-apply only the A4 page padding — the preview
+   style sheet offsets .markdown-body horizontally for the editor layout. */
+.markdown-body.md2pdf-page {
+  margin: 0 auto !important; padding: ${PAGE_PAD.top}px ${PAGE_PAD.right}px ${PAGE_PAD.bottom}px ${PAGE_PAD.left}px !important;
+  max-width: none; min-height: 0; width: auto;
+}
+.md2pdf-page { box-sizing: border-box; }
+.code-block-header { display: none !important; }
+.markdown-body pre { white-space: pre-wrap; word-wrap: break-word; overflow-x: hidden; }
+/* github-markdown-css ships ".markdown-body pre > code { white-space: pre }",
+   which beats the rule above and lets long lines run past the page box.
+   Reset it so wrapped <pre> content actually wraps. */
+.markdown-body pre > code { white-space: pre-wrap; word-wrap: break-word; }
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+.markdown-body img { max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<article class="markdown-body" id="md-src">${content}</article>
+<div id="stage"></div>
+</body>
+</html>`);
+            doc.close();
+            await new Promise(resolve => { iframe.onload = resolve; setTimeout(resolve, 1500); });
+            await new Promise(r => setTimeout(r, 400));
+
+            const stage = doc.getElementById('stage');
+            const article = doc.getElementById('md-src');
+            stage.style.cssText = `width:${PAGE_INNER_W}px;margin:0;`;
+
+            const atoms = buildAtoms(article, stage);
+            // The source article has served its purpose; the pages carry the
+            // content now, and leaving it in place would double the document.
+            article.remove();
+            const pages = paginateIntoPages(atoms, stage, bodyBg);
+
+            // Rasterise each page.
+            const baseName = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '');
+            const files = {};
+            for (let i = 0; i < pages.length; i++) {
+                const canvas = await html2canvas(pages[i], {
+                    scale: 2, useCORS: true, backgroundColor: bodyBg, logging: false,
+                });
+                const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+                files[`${baseName}-${String(i + 1).padStart(2, '0')}.png`] = [new Uint8Array(await blob.arrayBuffer()), { level: 6 }];
+            }
+
+            const zipped = fflate.zipSync(files);
+            const link = document.createElement('a');
+            link.download = `${baseName}-a4.zip`;
+            link.href = URL.createObjectURL(new Blob([zipped], { type: 'application/zip' }));
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+            showToast(t('imgZipped').replace('{n}', pages.length));
+
+        } catch (err) {
+            console.error('Image pages export failed', err && (err.stack || err.message || err));
+            alert('Image export failed.');
+        } finally {
+            if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            exportOverlay.classList.remove('active');
+            exportBtn.classList.remove('loading');
+            if (btnLabel) btnLabel.textContent = t('export');
+        }
+    }
+
     // ── Export Image ─────────────────────────────────
 
     async function exportImage() {
@@ -2085,6 +2535,7 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
             return;
         }
 
+        setExportStatus('sharing');
         exportOverlay.classList.add('active');
 
         try {
@@ -2441,6 +2892,7 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         exportPDFPagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportPDF(true); });
         exportHTMLBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportHTML(); });
         exportImageBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImage(); });
+        exportImagePagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImagePages(); });
         shareBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); shareByURL(); });
 
         // Share modal
@@ -2584,6 +3036,7 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
                 if (format === 'pdf-pages') exportPDF(true);
                 if (format === 'html')      exportHTML();
                 if (format === 'image')     exportImage();
+                if (format === 'image-pages') exportImagePages();
             });
         }
 
@@ -2612,15 +3065,16 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
             });
 
             navigator.modelContext.registerTool('export-document', {
-                description: 'Export current document. Formats: pdf (continuous single page), pdf-pages (PDF split into A4 pages), html, image.',
+                description: 'Export current document. Formats: pdf (continuous single page), pdf-pages (PDF split into A4 pages), html, image (single long PNG), image-pages (ZIP of A4 page PNGs).',
                 params: {
-                    format: { type: 'string', description: 'Export format: pdf, pdf-pages, html, or image' },
+                    format: { type: 'string', description: 'Export format: pdf, pdf-pages, html, image, or image-pages' },
                 },
                 execute: async ({ format }) => {
                     if (format === 'pdf')       await exportPDF(false);
                     if (format === 'pdf-pages') await exportPDF(true);
                     if (format === 'html')      await exportHTML();
                     if (format === 'image')     await exportImage();
+                    if (format === 'image-pages') await exportImagePages();
                     return { success: true, message: `Exported as ${format}` };
                 },
             });
