@@ -20,7 +20,7 @@ We are committed to making participation in this project a harassment-free exper
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported by contacting **jsiapo.dev@gmail.com**. All complaints will be reviewed and investigated.
+Instances of unacceptable behavior may be reported by contacting **cxkctrl1303@hotmail.com**. All complaints will be reviewed and investigated.
 
 Project maintainers who do not follow the Code of Conduct may be removed from the project team.
 

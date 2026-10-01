@@ -7,7 +7,10 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const SITE = 'https://md2pdf.studio';
-const GH_REPO = 'https://github.com/JSiapoDEV/md2pdf';
+const GH_REPO = 'https://github.com/Jiafei-Queen/md2pdf';
+const GH_UPSTREAM = 'https://github.com/JSiapoDEV/md2pdf';
+const AUTHOR_NAME = 'Jiafei';
+const AUTHOR_NAME_UPSTREAM = 'JSiapoDev';
 
 // ── Shared chrome ─────────────────────────────────────
 
@@ -75,7 +78,7 @@ const BASE_CSS = `
 `;
 
 const FOOTER = `<div class="footer">
-            <span>Built by <a href="https://jsiapo.dev">JSiapoDev</a></span>
+            <span>Built by <a href="${GH_REPO}">${AUTHOR_NAME}</a> (fork of <a href="https://jsiapo.dev">${AUTHOR_NAME_UPSTREAM}</a>)</span>
             <span><a href="/">MD2PDF</a> &middot; <a href="/about">About</a> &middot; <a href="${GH_REPO}">GitHub</a></span>
         </div>`;
 
@@ -93,7 +96,7 @@ function pageHead({ title, desc, canonical, keywords, jsonLd }) {
     <meta name="description" content="${esc(desc)}">
     <meta name="keywords" content="${esc(keywords)}">
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-    <meta name="author" content="JSiapoDev">
+    <meta name="author" content="${AUTHOR_NAME}">
     <link rel="canonical" href="${canonical}">
 
     <meta property="og:type" content="website">

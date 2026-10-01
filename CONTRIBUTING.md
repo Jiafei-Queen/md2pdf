@@ -6,7 +6,7 @@ Thanks for your interest in contributing! MD2PDF is a simple, zero-dependency st
 
 ### Reporting Bugs
 
-1. Check [existing issues](https://github.com/JSiapoDEV/MD2PDF/issues) first
+1. Check [existing issues](https://github.com/Jiafei-Queen/md2pdf/issues) first
 2. Open a new issue with:
    - What you expected to happen
    - What actually happened
@@ -35,9 +35,9 @@ Open an issue with the **feature request** label. Describe:
 No build tools needed. Just:
 
 ```bash
-git clone https://github.com/JSiapoDEV/MD2PDF.git
-cd MD2PDF
-open index.html
+git clone https://github.com/Jiafei-Queen/md2pdf.git
+cd md2pdf
+open public/index.html
 ```
 
 Edit the files and refresh the browser.

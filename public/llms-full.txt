@@ -3,7 +3,8 @@
 > MD2PDF is a free, open-source online tool that converts Markdown (.md) files into beautifully styled PDFs, HTML files, and PNG images. Features include Mermaid diagram rendering, auto table of contents, syntax highlighting for 180+ languages, and end-to-end encryption (AES-256-GCM). Runs entirely in the browser with no signup, no server processing, and no tracking. Includes a public REST API and an installable AI Skill.
 
 Website: https://md2pdf.studio
-GitHub: https://github.com/JSiapoDEV/md2pdf
+GitHub: https://github.com/Jiafei-Queen/md2pdf
+Upstream: https://github.com/JSiapoDEV/md2pdf
 Last updated: 2026-04-16
 API version: 1.0 (stable)
 
@@ -272,7 +273,10 @@ MD2PDF supports full GitHub-Flavored Markdown (GFM) plus extensions:
 
 ## Author
 
-Built by JSiapoDev
+Maintained by Jiafei
+- GitHub: https://github.com/Jiafei-Queen
+
+Original project by JSiapoDev
 - Website: https://jsiapo.dev
 - GitHub: https://github.com/JSiapoDEV
 - LinkedIn: https://www.linkedin.com/in/jsiapo/

@@ -45,8 +45,8 @@ No install required. Visit [md2pdf.studio](https://md2pdf.studio).
 Or run locally:
 
 ```bash
-git clone https://github.com/JSiapoDEV/MD2PDF.git
-cd MD2PDF
+git clone https://github.com/Jiafei-Queen/md2pdf.git
+cd md2pdf
 open public/index.html
 ```
 
@@ -98,7 +98,7 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 ## License
 
-[MIT](LICENSE) — Built by [JSiapoDev](https://jsiapo.dev)
+[MIT](LICENSE) — Maintained by [Jiafei](https://github.com/Jiafei-Queen/md2pdf), fork of the original project by [JSiapoDev](https://jsiapo.dev)
 
 ---
 

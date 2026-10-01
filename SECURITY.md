@@ -14,7 +14,7 @@ MD2PDF runs **entirely in the browser**. No data is sent to any server. All proc
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do NOT open a public issue**
-2. Email **jsiapo.dev@gmail.com** with:
+2. Email **cxkctrl1303@hotmail.com** with:
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact

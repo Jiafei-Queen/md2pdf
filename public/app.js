@@ -73,6 +73,7 @@
             find: 'Find...', replace: 'Replace...',
             replaceBtn: 'Replace', replaceAll: 'All',
             builtBy: 'Built by', starGithub: 'Star on GitHub',
+            authorName: 'Jiafei', authorUrl: 'https://github.com/Jiafei-Queen/md2pdf',
             apiPrompts: 'AI Skill',
             linkCreated: 'Link created!', linkHint: 'Link expires 90 days after last update.',
             copy: 'Copy', copied: 'Copied!',
@@ -95,8 +96,8 @@
             copyCreated: 'Editable copy created',
             sharedLockTip: 'Read-only shared document',
             imgDownloaded: 'Image downloaded', htmlDownloaded: 'HTML downloaded',
-            exportFailed: 'Export failed.',
             mdDownloaded: 'Markdown downloaded',
+            exportFailed: 'Export failed.',
             replaced: 'Replaced {n} occurrences',
             decryptFailed: 'Could not decrypt document. The link may be incomplete.',
             encryptedShare: 'End-to-end encrypted',
@@ -114,13 +115,14 @@
             markdown: 'Markdown', preview: 'Vista previa',
             export: 'Exportar', exportPdf: 'Exportar PDF', exportPdfPages: 'PDF (páginas A4)', exportHtml: 'Exportar HTML',
             exportImage: 'Exportar Imagen', shareLink: 'Compartir',
-            templates: 'Plantillas', upload: 'Subir',
             exportMarkdown: 'Markdown',
+            templates: 'Plantillas', upload: 'Subir',
             blankDoc: 'Documento en blanco', cvResume: 'CV / Hoja de vida', report: 'Reporte',
             docs: 'Documentacion', changelog: 'Changelog', meeting: 'Notas de reunion',
             find: 'Buscar...', replace: 'Reemplazar...',
             replaceBtn: 'Reemplazar', replaceAll: 'Todo',
             builtBy: 'Creado por', starGithub: 'Estrella en GitHub',
+            authorName: 'Jiafei', authorUrl: 'https://github.com/Jiafei-Queen/md2pdf',
             apiPrompts: 'Skill de IA',
             linkCreated: 'Enlace creado!', linkHint: 'El enlace expira 90 dias despues de la ultima actualizacion.',
             copy: 'Copiar', copied: 'Copiado!',
@@ -143,9 +145,9 @@
             copyCreated: 'Copia editable creada',
             sharedLockTip: 'Documento compartido de solo lectura',
             imgDownloaded: 'Imagen descargada', htmlDownloaded: 'HTML descargado',
+            mdDownloaded: 'Markdown descargado',
             exportFailed: 'Error al exportar.',
             replaced: '{n} ocurrencias reemplazadas',
-            mdDownloaded: 'Markdown descargado',
             decryptFailed: 'No se pudo descifrar el documento. El enlace puede estar incompleto.',
             encryptedShare: 'Cifrado de extremo a extremo',
             tocTitle: 'Tabla de Contenido',
@@ -189,9 +191,9 @@ Follow those instructions exactly.
         $('#exportPDFBtn').lastChild.textContent = ' ' + t('exportPdf');
         $('#exportPDFPagesBtn').lastChild.textContent = ' ' + t('exportPdfPages');
         $('#exportHTMLBtn').lastChild.textContent = ' ' + t('exportHtml');
+        $('#exportMarkdownBtn').lastChild.textContent = ' ' + t('exportMarkdown');
         $('#exportImageBtn').lastChild.textContent = ' ' + t('exportImage');
         $('#exportImagePagesBtn').lastChild.textContent = ' ' + t('exportImagePages');
-        $('#exportMarkdownBtn').lastChild.textContent = ' ' + t('exportMarkdown');
         $('#shareBtn').lastChild.textContent = ' ' + t('shareLink');
 
         // Templates
@@ -209,7 +211,7 @@ Follow those instructions exactly.
         $('#replaceAllBtn').textContent = t('replaceAll');
 
         // Footer
-        $('.footer-brand').innerHTML = t('builtBy') + ' <a href="https://jsiapo.dev" target="_blank" rel="noopener">JSiapoDev</a>';
+        $('.footer-brand').innerHTML = t('builtBy') + ' <a href="' + t('authorUrl') + '" target="_blank" rel="noopener">' + t('authorName') + '</a>';
 
         // Editor & Preview
         editor.placeholder = t('editorPlaceholder');
@@ -1928,8 +1930,6 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         showToast(t('htmlDownloaded'));
     }
 
-    // ── Dropdowns ────────────────────────────────────
-
     function exportMarkdown() {
         const baseName = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '');
         const blob = new Blob([editor.value], { type: 'text/markdown;charset=utf-8' });
@@ -1941,6 +1941,8 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         URL.revokeObjectURL(url);
         showToast(t('mdDownloaded'));
     }
+
+    // ── Dropdowns ────────────────────────────────────
 
     function initDropdowns() {
         document.querySelectorAll('.dropdown').forEach(dd => {
@@ -2909,9 +2911,9 @@ body { width: ${PAGE_INNER_W}px; }
         exportPDFBtn.addEventListener('click',  () => { exportDropdown.classList.remove('open'); exportPDF(false); });
         exportPDFPagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportPDF(true); });
         exportHTMLBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportHTML(); });
+        exportMarkdownBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportMarkdown(); });
         exportImageBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImage(); });
         exportImagePagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImagePages(); });
-        exportMarkdownBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportMarkdown(); });
         shareBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); shareByURL(); });
 
         // Share modal
@@ -3054,9 +3056,9 @@ body { width: ${PAGE_INNER_W}px; }
                 if (format === 'pdf')       exportPDF(false);
                 if (format === 'pdf-pages') exportPDF(true);
                 if (format === 'html')      exportHTML();
+                if (format === 'markdown')  exportMarkdown();
                 if (format === 'image')     exportImage();
                 if (format === 'image-pages') exportImagePages();
-                if (format === 'markdown')  exportMarkdown();
             });
         }
 
@@ -3093,9 +3095,9 @@ body { width: ${PAGE_INNER_W}px; }
                     if (format === 'pdf')       await exportPDF(false);
                     if (format === 'pdf-pages') await exportPDF(true);
                     if (format === 'html')      await exportHTML();
+                    if (format === 'markdown')  await exportMarkdown();
                     if (format === 'image')     await exportImage();
                     if (format === 'image-pages') await exportImagePages();
-                    if (format === 'markdown')  await exportMarkdown();
                     return { success: true, message: `Exported as ${format}` };
                 },
             });
@@ -3125,7 +3127,7 @@ body { width: ${PAGE_INNER_W}px; }
     // ── GitHub Stars ─────────────────────────────────
 
     function fetchGitHubStars() {
-        fetch('https://api.github.com/repos/JSiapoDEV/md2pdf')
+        fetch('https://api.github.com/repos/Jiafei-Queen/md2pdf')
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.stargazers_count !== undefined) {
