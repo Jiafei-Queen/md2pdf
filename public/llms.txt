@@ -6,7 +6,7 @@ Last updated: 2026-04-16
 
 ## Main
 
-- [MD2PDF App](https://md2pdf.studio/): Online Markdown editor with live preview, 11 visual styles, Mermaid diagrams, TOC, and export to PDF/HTML/image
+- [MD2PDF App](https://md2pdf.studio/): Online Markdown editor with live preview, 11 visual styles, Mermaid diagrams, TOC, and export to PDF/HTML/Markdown/image
 - [About MD2PDF](https://md2pdf.studio/about): Background, features, and how it works
 - [Full AI Documentation](https://md2pdf.studio/llms-full.txt): Complete reference for LLMs — features, API, AI Skill, styles, and usage
 - [AI Skill (downloadable)](https://md2pdf.studio/skill.md): Installable skill file for Claude, Custom GPTs, Gemini, and compatible agents

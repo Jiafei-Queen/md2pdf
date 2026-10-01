@@ -18,7 +18,7 @@ API version: 1.0 (stable)
 - **Auto table of contents** — write `[TOC]` anywhere to generate a linked TOC from headings
 - 11 visual styles for document rendering
 - Custom CSS injection for full styling control
-- Export to PDF (continuous single page, or paginated A4 pages), HTML (standalone with inlined styles), and images (single long PNG, or a ZIP of A4 page PNGs)
+- Export to PDF (continuous single page, or paginated A4 pages), HTML (standalone with inlined styles), Markdown (raw `.md` source), and images (single long PNG, or a ZIP of A4 page PNGs)
 - **End-to-end encryption** — all shared documents encrypted with AES-256-GCM
 - Share documents via URL with rich OG previews for WhatsApp, Teams, and Slack
 - Dark and light theme toggle
@@ -166,7 +166,7 @@ description: Create and share styled PDF, HTML, and image documents from Markdow
 
 Use this skill when the user asks you to:
 - Create a document or report from their request
-- Save or export markdown as a PDF, HTML, or image
+- Save or export markdown as a PDF, HTML, Markdown, or image
 - Share a styled version of written content
 - Generate a shareable link for a document
 

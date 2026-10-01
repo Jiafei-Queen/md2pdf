@@ -325,7 +325,7 @@ function buildPage(style) {
             </div>
             <div class="info-card">
                 <div class="label">Export Formats</div>
-                <div class="value">PDF, HTML, PNG</div>
+                <div class="value">PDF, HTML, MD, PNG</div>
             </div>
         </div>
 
@@ -339,7 +339,7 @@ function buildPage(style) {
             <li style="margin-bottom: 8px;">Go to <a href="${ctaUrl}">md2pdf.studio/?style=${style.key}</a> — the ${style.name} style loads automatically.</li>
             <li style="margin-bottom: 8px;">Write or paste your Markdown in the editor, or drag and drop a <code style="background:#161b22;padding:2px 6px;border-radius:4px;font-size:0.9em;">.md</code> file.</li>
             <li style="margin-bottom: 8px;">See the live preview with ${style.name} styling applied in real time.</li>
-            <li style="margin-bottom: 8px;">Click <strong>Export</strong> to download as PDF, HTML, or image — or share via a link.</li>
+            <li style="margin-bottom: 8px;">Click <strong>Export</strong> to download as PDF, HTML, Markdown, or image — or share via a link.</li>
         </ol>
 
         <h2>All Styles</h2>

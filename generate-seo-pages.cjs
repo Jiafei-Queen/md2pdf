@@ -229,7 +229,7 @@ function buildTemplate(t) {
 
   return pageHead({
     title: `${t.name} Template — Markdown to PDF | MD2PDF`,
-    desc: `${t.tagline}. Free Markdown template — edit in your browser and export to PDF, HTML, or image.`,
+    desc: `${t.tagline}. Free Markdown template — edit in your browser and export to PDF, HTML, Markdown, or image.`,
     canonical: url,
     keywords: t.keywords,
     jsonLd,
@@ -257,7 +257,7 @@ function buildTemplate(t) {
             </div>
             <div class="info-card">
                 <div class="label">Export Formats</div>
-                <div class="value">PDF, HTML, PNG</div>
+                <div class="value">PDF, HTML, MD, PNG</div>
             </div>
             <div class="info-card">
                 <div class="label">Price</div>
@@ -280,7 +280,7 @@ function buildTemplate(t) {
             <li style="margin-bottom: 8px;">Go to <a href="${ctaUrl}">md2pdf.studio/?template=${t.key}</a> — the template loads into the editor.</li>
             <li style="margin-bottom: 8px;">Edit the content in-place. Live preview updates as you type.</li>
             <li style="margin-bottom: 8px;">Pick a visual style from <a href="/styles/">11 options</a> — or customize with your own CSS.</li>
-            <li style="margin-bottom: 8px;">Click <strong>Export</strong> to download as PDF, HTML, or image — or share by URL.</li>
+            <li style="margin-bottom: 8px;">Click <strong>Export</strong> to download as PDF, HTML, Markdown, or image — or share by URL.</li>
         </ol>
 
         <h2>All Templates</h2>
@@ -319,7 +319,7 @@ function buildTemplatesIndex() {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
     name: 'Markdown Templates — MD2PDF',
-    description: 'Free Markdown templates for CVs, reports, documentation, changelogs, and meeting notes. Export to PDF, HTML, or image.',
+    description: 'Free Markdown templates for CVs, reports, documentation, changelogs, and meeting notes. Export to PDF, HTML, Markdown, or image.',
     url,
     isPartOf: { '@type': 'WebApplication', name: 'MD2PDF', url: SITE },
     breadcrumb: breadcrumbJsonLd(trail),
@@ -332,7 +332,7 @@ function buildTemplatesIndex() {
 
   return pageHead({
     title: 'Markdown Templates — Free CV, Report, Documentation, Changelog | MD2PDF',
-    desc: 'Free Markdown templates: CV/Resume, Report, Documentation, Changelog, Meeting Notes. Edit in browser, export to PDF, HTML, or image.',
+    desc: 'Free Markdown templates: CV/Resume, Report, Documentation, Changelog, Meeting Notes. Edit in browser, export to PDF, HTML, Markdown, or image.',
     canonical: url,
     keywords: 'markdown templates, cv template markdown, report template, documentation template, changelog template, meeting notes template, free markdown templates',
     jsonLd,
@@ -376,7 +376,7 @@ const VS = [
       { feature: 'Visual styles out of the box', md2pdf: { v: '11 styles', c: 'yes' }, other: { v: 'Via templates / LaTeX', c: 'mid' } },
       { feature: 'Mermaid diagrams', md2pdf: { v: 'Built-in', c: 'yes' }, other: { v: 'Via filter/plugin', c: 'mid' } },
       { feature: 'CLI / scripting', md2pdf: { v: 'REST API', c: 'mid' }, other: { v: 'Native CLI', c: 'yes' } },
-      { feature: 'Output formats', md2pdf: { v: 'PDF, HTML, PNG', c: 'mid' }, other: { v: 'Everything (40+)', c: 'yes' } },
+      { feature: 'Output formats', md2pdf: { v: 'PDF, HTML, MD, PNG', c: 'mid' }, other: { v: 'Everything (40+)', c: 'yes' } },
       { feature: 'Custom CSS', md2pdf: { v: 'Yes, inline in browser', c: 'yes' }, other: { v: 'Yes, via templates', c: 'yes' } },
       { feature: 'Free', md2pdf: { v: 'Yes', c: 'yes' }, other: { v: 'Yes (open source)', c: 'yes' } },
       { feature: 'AI-agent ready', md2pdf: { v: 'Yes — Claude Skill + API', c: 'yes' }, other: { v: 'No', c: 'no' } },

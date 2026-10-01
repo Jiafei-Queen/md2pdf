@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23f0883e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/><polyline points='10 9 9 9 8 9'/></svg>">
 
     <!-- SEO & AI Discoverability -->
-    <meta name="description" content="Convert Markdown to PDF online for free. 11 styles, Mermaid diagrams, auto table of contents, syntax highlighting for 180+ languages, end-to-end encryption. Export to PDF, HTML, or image. No signup — runs in your browser.">
+    <meta name="description" content="Convert Markdown to PDF online for free. 11 styles, Mermaid diagrams, auto table of contents, syntax highlighting for 180+ languages, end-to-end encryption. Export to PDF, HTML, Markdown, or image. No signup — runs in your browser.">
     <meta name="keywords" content="markdown to pdf, md to pdf, markdown converter, mermaid diagrams, markdown diagrams, table of contents, github markdown, markdown editor, pdf export, html export, notion style, latex style, dracula theme, encrypted documents, ai skill, claude skill, free tool">
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
     <meta name="author" content="JSiapoDev">
@@ -21,7 +21,7 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://md2pdf.studio/">
     <meta property="og:title" content="Markdown to PDF Converter Online Free — MD2PDF">
-    <meta property="og:description" content="Convert Markdown to PDF online for free. 11 styles, Mermaid diagrams, auto TOC, syntax highlighting, E2E encryption. Export to PDF, HTML, or image. No signup required.">
+    <meta property="og:description" content="Convert Markdown to PDF online for free. 11 styles, Mermaid diagrams, auto TOC, syntax highlighting, E2E encryption. Export to PDF, HTML, Markdown, or image. No signup required.">
     <meta property="og:image" content="https://md2pdf.studio/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -156,6 +156,10 @@
                         <button class="dropdown-item" id="exportHTMLBtn">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                             Export HTML
+                        </button>
+                        <button class="dropdown-item" id="exportMarkdownBtn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="9 12 12 15 15 12"/><polyline points="12 15 12 18"/></svg>
+                            Export Markdown
                         </button>
                         <button class="dropdown-item" id="exportImageBtn">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -334,14 +338,14 @@
             <ol>
                 <li><strong>Write or upload your Markdown</strong> — Paste your content in the editor, drag and drop a .md file, or choose a template to get started.</li>
                 <li><strong>Choose a visual style</strong> — Pick from 11 styles: Notion, GitHub, Minimal, Academic, Corporate, LaTeX, Dracula, Newspaper, Handwritten, Terminal, or Pastel. Add custom CSS for full control.</li>
-                <li><strong>Export your document</strong> — Click Export to download as PDF, HTML, or PNG image. Or share via a link that works in WhatsApp, Teams, and Slack.</li>
+                <li><strong>Export your document</strong> — Click Export to download as PDF, HTML, Markdown, or PNG image. Or share via a link that works in WhatsApp, Teams, and Slack.</li>
             </ol>
 
             <h2>Features</h2>
             <ul>
                 <li><strong>Live preview</strong> — See your rendered document in real-time as you type</li>
                 <li><strong>11 visual styles</strong> — From clean Notion to dark Dracula, formal Academic to fun Handwritten</li>
-                <li><strong>PDF, HTML, and image export</strong> — Download in any format with one click</li>
+                <li><strong>PDF, HTML, Markdown, and image export</strong> — Download in any format with one click</li>
                 <li><strong>Syntax highlighting</strong> — 180+ programming languages with automatic detection and copy button</li>
                 <li><strong>Mermaid diagrams</strong> — Flowcharts, sequence diagrams, Gantt charts, pie charts, and more — rendered as SVG from code blocks</li>
                 <li><strong>Auto table of contents</strong> — Write [TOC] to generate a linked table of contents from your headings</li>
@@ -395,7 +399,7 @@
 
             <details><summary>Does it work offline?</summary><p>The editor and preview work offline after the initial page load. Export and sharing features require an internet connection.</p></details>
 
-            <details><summary>What export formats are available?</summary><p>PDF (continuous single page), HTML (standalone file with inlined styles), and PNG image. All formats preserve your chosen style.</p></details>
+            <details><summary>What export formats are available?</summary><p>PDF (continuous single page or A4 pages), HTML (standalone file with inlined styles), Markdown (raw <code>.md</code> source), and PNG image. All formats preserve your chosen style.</p></details>
 
             <details><summary>Can AI agents use MD2PDF?</summary><p>Yes. MD2PDF provides an installable Skill in the Claude Skills format (SKILL.md) that works with Claude, Custom GPTs, Gemini, and any compatible agent. It also exposes a public REST API for programmatic access and supports WebMCP for direct browser integration.</p></details>
 
@@ -437,7 +441,7 @@
           "@type": "HowToStep",
           "position": 3,
           "name": "Export your document",
-          "text": "Click Export to download as PDF, HTML, or PNG image. Or generate a shareable link."
+          "text": "Click Export to download as PDF, HTML, Markdown, or PNG image. Or generate a shareable link."
         }
       ],
       "tool": { "@type": "HowToTool", "name": "MD2PDF (md2pdf.studio)" },
@@ -458,7 +462,7 @@
         {"@type": "Question", "name": "Is my data safe?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. MD2PDF runs entirely in your browser. Your documents are never sent to a server. No cookies, no tracking."}},
         {"@type": "Question", "name": "Can I share my documents?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Click Export > Share Link to generate a shareable URL. Recipients can view your styled document. Links show rich previews in WhatsApp, Teams, and Slack."}},
         {"@type": "Question", "name": "Does it work offline?", "acceptedAnswer": {"@type": "Answer", "text": "The editor and preview work offline after the initial page load. Export and sharing features require an internet connection."}},
-        {"@type": "Question", "name": "What export formats are available?", "acceptedAnswer": {"@type": "Answer", "text": "PDF (continuous single page), HTML (standalone file with inlined styles), and PNG image. All formats preserve your chosen style."}},
+        {"@type": "Question", "name": "What export formats are available?", "acceptedAnswer": {"@type": "Answer", "text": "PDF (continuous single page or A4 pages), HTML (standalone file with inlined styles), Markdown (raw .md source), and PNG image. All formats preserve your chosen style."}},
         {"@type": "Question", "name": "Can AI agents use MD2PDF?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. MD2PDF provides an installable Skill in the Claude Skills format plus a public REST API, so Claude, Custom GPTs, Gemini, and other agents can create, update, and share styled documents on the user's behalf."}},
         {"@type": "Question", "name": "Does MD2PDF support Mermaid diagrams?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Write Mermaid code inside a ```mermaid code block and it renders automatically as an SVG diagram. Supported types include flowcharts, sequence diagrams, Gantt charts, pie charts, class diagrams, and more."}},
         {"@type": "Question", "name": "Can I generate a table of contents?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Write [TOC] on its own line anywhere in your document. MD2PDF will auto-generate a linked table of contents from all your headings."}},
@@ -542,7 +546,7 @@
     <!-- WebMCP: Declarative forms for AI agents -->
     <form id="wmcpConvert"
           toolname="convert-markdown"
-          tooldescription="Convert markdown text to a styled document. Paste markdown content, optionally choose a visual style, then submit to render. Use the export tools to download as PDF, HTML, or image."
+          tooldescription="Convert markdown text to a styled document. Paste markdown content, optionally choose a visual style, then submit to render. Use the export tools to download as PDF, HTML, Markdown, or image."
           toolautosubmit="true"
           hidden>
         <textarea name="markdown"
@@ -566,13 +570,14 @@
     </form>
 
     <form id="wmcpExport"
+            <option value="markdown">Markdown (.md)</option>
           toolname="export-document"
-          tooldescription="Export the current markdown document to a file. Choose the format: pdf (styled continuous single page), pdf-pages (PDF split into A4 pages), html (standalone file with styles inlined), image (PNG screenshot), or image-pages (ZIP of A4 page PNGs)."
+          tooldescription="Export the current markdown document to a file. Choose the format: pdf (styled continuous single page), pdf-pages (PDF split into A4 pages), html (standalone file with styles inlined), markdown (raw .md source), image (PNG screenshot), or image-pages (ZIP of A4 page PNGs)."
           toolautosubmit="true"
           hidden>
         <select name="format"
                 toolparamtitle="Export Format"
-                toolparamdescription="File format to export. Options: pdf, pdf-pages, html, image, image-pages.">
+                toolparamdescription="File format to export. Options: pdf, pdf-pages, html, markdown, image, image-pages.">
             <option value="pdf">PDF</option>
             <option value="pdf-pages">PDF (A4 pages)</option>
             <option value="html">HTML</option>
@@ -600,7 +605,7 @@
             <ol>
                 <li>Write or paste your Markdown in the editor, or drag and drop a .md file</li>
                 <li>Choose from 11 visual styles: Notion, GitHub, Minimal, Academic, Corporate, LaTeX, Dracula, Newspaper, Handwritten, Terminal, or Pastel</li>
-                <li>Export as PDF, HTML, or image — or share via a link</li>
+                <li>Export as PDF, HTML, Markdown, or image — or share via a link</li>
             </ol>
             <p>Features: live preview, Mermaid diagrams, auto table of contents, syntax highlighting for 180+ languages, end-to-end encryption, custom CSS, templates, dark mode, auto-save, AI Skill for Claude/ChatGPT, and a public REST API.</p>
             <p>Please enable JavaScript to use the editor.</p>

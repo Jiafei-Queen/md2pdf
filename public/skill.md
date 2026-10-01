@@ -7,7 +7,7 @@ description: Create and share styled PDF, HTML, and image documents from Markdow
 
 Use this skill when the user asks you to:
 - Create a document or report from their request
-- Save or export markdown as a PDF, HTML, or image
+- Save or export markdown as a PDF, HTML, Markdown, or image
 - Share a styled version of written content
 - Generate a shareable link for a document
 
@@ -112,5 +112,5 @@ This is my first document."
 - All documents are encrypted at rest (AES-256-GCM) — the server cannot read stored content
 - The decryption key is in the URL hash fragment (`#k=`) and never reaches the server
 - Always share the full URL including `#k=` — without it the document is unreadable
-- The user can export the document as PDF, HTML, or image
+- The user can export the document as PDF, HTML, Markdown, or image
 - Shared links show rich previews in WhatsApp, Teams, and Slack

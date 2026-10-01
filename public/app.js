@@ -13,6 +13,7 @@
     const exportPDFBtn    = $('#exportPDFBtn');
     const exportPDFPagesBtn = $('#exportPDFPagesBtn');
     const exportHTMLBtn   = $('#exportHTMLBtn');
+    const exportMarkdownBtn = $('#exportMarkdownBtn');
     const uploadBtn       = $('#uploadBtn');
     const fileInput       = $('#fileInput');
     const dropOverlay     = $('#dropOverlay');
@@ -65,6 +66,7 @@
             markdown: 'Markdown', preview: 'Preview',
             export: 'Export', exportPdf: 'PDF', exportPdfPages: 'PDF (A4)', exportHtml: 'HTML',
             exportImage: 'Image', shareLink: 'Share Link',
+            exportMarkdown: 'Markdown',
             templates: 'Templates', upload: 'Upload',
             blankDoc: 'Blank document', cvResume: 'CV / Resume', report: 'Report',
             docs: 'Documentation', changelog: 'Changelog', meeting: 'Meeting Notes',
@@ -94,6 +96,7 @@
             sharedLockTip: 'Read-only shared document',
             imgDownloaded: 'Image downloaded', htmlDownloaded: 'HTML downloaded',
             exportFailed: 'Export failed.',
+            mdDownloaded: 'Markdown downloaded',
             replaced: 'Replaced {n} occurrences',
             decryptFailed: 'Could not decrypt document. The link may be incomplete.',
             encryptedShare: 'End-to-end encrypted',
@@ -112,6 +115,7 @@
             export: 'Exportar', exportPdf: 'Exportar PDF', exportPdfPages: 'PDF (páginas A4)', exportHtml: 'Exportar HTML',
             exportImage: 'Exportar Imagen', shareLink: 'Compartir',
             templates: 'Plantillas', upload: 'Subir',
+            exportMarkdown: 'Markdown',
             blankDoc: 'Documento en blanco', cvResume: 'CV / Hoja de vida', report: 'Reporte',
             docs: 'Documentacion', changelog: 'Changelog', meeting: 'Notas de reunion',
             find: 'Buscar...', replace: 'Reemplazar...',
@@ -141,6 +145,7 @@
             imgDownloaded: 'Imagen descargada', htmlDownloaded: 'HTML descargado',
             exportFailed: 'Error al exportar.',
             replaced: '{n} ocurrencias reemplazadas',
+            mdDownloaded: 'Markdown descargado',
             decryptFailed: 'No se pudo descifrar el documento. El enlace puede estar incompleto.',
             encryptedShare: 'Cifrado de extremo a extremo',
             tocTitle: 'Tabla de Contenido',
@@ -186,6 +191,7 @@ Follow those instructions exactly.
         $('#exportHTMLBtn').lastChild.textContent = ' ' + t('exportHtml');
         $('#exportImageBtn').lastChild.textContent = ' ' + t('exportImage');
         $('#exportImagePagesBtn').lastChild.textContent = ' ' + t('exportImagePages');
+        $('#exportMarkdownBtn').lastChild.textContent = ' ' + t('exportMarkdown');
         $('#shareBtn').lastChild.textContent = ' ' + t('shareLink');
 
         // Templates
@@ -1924,6 +1930,18 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
 
     // ── Dropdowns ────────────────────────────────────
 
+    function exportMarkdown() {
+        const baseName = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '');
+        const blob = new Blob([editor.value], { type: 'text/markdown;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = baseName + '.md';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(t('mdDownloaded'));
+    }
+
     function initDropdowns() {
         document.querySelectorAll('.dropdown').forEach(dd => {
             const trigger = dd.querySelector('.btn, button:first-child');
@@ -2893,6 +2911,7 @@ body { width: ${PAGE_INNER_W}px; }
         exportHTMLBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportHTML(); });
         exportImageBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImage(); });
         exportImagePagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImagePages(); });
+        exportMarkdownBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportMarkdown(); });
         shareBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); shareByURL(); });
 
         // Share modal
@@ -3037,6 +3056,7 @@ body { width: ${PAGE_INNER_W}px; }
                 if (format === 'html')      exportHTML();
                 if (format === 'image')     exportImage();
                 if (format === 'image-pages') exportImagePages();
+                if (format === 'markdown')  exportMarkdown();
             });
         }
 
@@ -3065,9 +3085,9 @@ body { width: ${PAGE_INNER_W}px; }
             });
 
             navigator.modelContext.registerTool('export-document', {
-                description: 'Export current document. Formats: pdf (continuous single page), pdf-pages (PDF split into A4 pages), html, image (single long PNG), image-pages (ZIP of A4 page PNGs).',
+                description: 'Export current document. Formats: pdf (continuous single page), pdf-pages (PDF split into A4 pages), html, markdown (raw .md source), image (single long PNG), image-pages (ZIP of A4 page PNGs).',
                 params: {
-                    format: { type: 'string', description: 'Export format: pdf, pdf-pages, html, image, or image-pages' },
+                    format: { type: 'string', description: 'Export format: pdf, pdf-pages, html, markdown, image, or image-pages' },
                 },
                 execute: async ({ format }) => {
                     if (format === 'pdf')       await exportPDF(false);
@@ -3075,6 +3095,7 @@ body { width: ${PAGE_INNER_W}px; }
                     if (format === 'html')      await exportHTML();
                     if (format === 'image')     await exportImage();
                     if (format === 'image-pages') await exportImagePages();
+                    if (format === 'markdown')  await exportMarkdown();
                     return { success: true, message: `Exported as ${format}` };
                 },
             });
