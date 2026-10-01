@@ -1,6 +1,6 @@
 # MD2PDF
 
-**[md2pdf.studio](https://md2pdf.studio)** — Convert Markdown to beautifully styled PDFs, HTML, and images. Runs entirely in your browser. Free, no signup.
+**[md2pdf.studio](https://md2pdf.studio)** — Convert Markdown to beautifully styled PDFs, HTML, and images. Editing and export run in your browser. Free, no signup.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-f0883e.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
@@ -36,6 +36,7 @@
 - [highlight.js](https://github.com/highlightjs/highlight.js) — Syntax highlighting
 - [mermaid](https://github.com/mermaid-js/mermaid) — Diagrams
 - [html2canvas](https://github.com/niklasvh/html2canvas) — Image export
+- [fflate](https://github.com/101arrowz/fflate) — ZIP packing for A4 image export
 - [LZ-String](https://github.com/pieroxy/lz-string) — URL sharing compression
 
 ## Quick Start
@@ -67,12 +68,14 @@ npx wrangler dev
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl + S` | Export to PDF |
+| `Ctrl + S` | Export to PDF (continuous) |
 | `Ctrl + F` | Find |
 | `Ctrl + H` | Find & Replace |
 | `Ctrl + Shift + L` | Toggle dark/light theme |
 | `F11` | Toggle fullscreen |
 | `Tab` | Insert tab in editor |
+
+The other export formats (PDF A4, HTML, Markdown, Images A4) are available from the **Export** dropdown.
 
 ## Available Styles
 

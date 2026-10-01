@@ -1,11 +1,11 @@
 # MD2PDF — Complete Documentation for AI Agents
 
-> MD2PDF is a free, open-source online tool that converts Markdown (.md) files into beautifully styled PDFs, HTML files, and PNG images. Features include Mermaid diagram rendering, auto table of contents, syntax highlighting for 180+ languages, and end-to-end encryption (AES-256-GCM). Runs entirely in the browser with no signup, no server processing, and no tracking. Includes a public REST API and an installable AI Skill.
+> MD2PDF is a free, open-source online tool that converts Markdown (.md) files into beautifully styled PDFs, HTML files, Markdown, and images. Features include Mermaid diagram rendering, auto table of contents, syntax highlighting for 180+ languages, and encryption at rest for shared documents (AES-256-GCM). Editing, rendering, and export all run in the browser with no signup and no tracking. Includes a public REST API and an installable AI Skill.
 
 Website: https://md2pdf.studio
 GitHub: https://github.com/Jiafei-Queen/md2pdf
 Upstream: https://github.com/JSiapoDEV/md2pdf
-Last updated: 2026-04-16
+Last updated: 2026-10-02
 API version: 1.0 (stable)
 
 ---
@@ -20,7 +20,7 @@ API version: 1.0 (stable)
 - 11 visual styles for document rendering
 - Custom CSS injection for full styling control
 - Export to PDF (continuous single page, or paginated A4 pages), HTML (standalone with inlined styles), Markdown (raw `.md` source), and images (single long PNG, or a ZIP of A4 page PNGs)
-- **End-to-end encryption** — all shared documents encrypted with AES-256-GCM
+- **Encryption at rest** — all shared documents stored as AES-256-GCM ciphertext; the decryption key is returned once and kept in the URL hash
 - Share documents via URL with rich OG previews for WhatsApp, Teams, and Slack
 - Dark and light theme toggle
 - Drag-and-drop .md file upload
@@ -32,7 +32,7 @@ API version: 1.0 (stable)
 - Installable AI Skill in Claude Skills format
 - Public REST API for programmatic access
 - WebMCP declarative forms for browser-based AI agent integration
-- No cookies, no analytics, no server uploads — fully private
+- No cookies, no analytics — private by default. Editing and export never touch the network; only sharing a document uploads it (encrypted at rest)
 
 ---
 
@@ -130,10 +130,11 @@ New content goes here."
 
 ### Security
 
-- All documents are encrypted at rest using **AES-256-GCM**
-- The decryption key (`key`) is returned in the API response and placed in the URL hash fragment (`#k=`)
-- The hash fragment is never sent to the server — only the person with the full link can decrypt
-- Cloudflare KV stores only ciphertext — the server cannot read document content
+- Documents are encrypted at rest using **AES-256-GCM**
+- The Worker encrypts the markdown before writing to KV, and returns the decryption key (`key`) in the API response
+- The key is placed in the URL hash fragment (`#k=`), which browsers never transmit to the server
+- Cloudflare KV stores only ciphertext. The key is held by the link recipient, not persisted server-side — anyone holding the full link can decrypt
+- Encryption is applied by the server on upload, so treat the API as a trusted service: content is plaintext in transit to the Worker over HTTPS
 
 ### Limits
 
@@ -250,11 +251,13 @@ MD2PDF supports full GitHub-Flavored Markdown (GFM) plus extensions:
 
 | Shortcut | Action |
 |----------|--------|
-| Ctrl+S / Cmd+S | Export to PDF |
+| Ctrl+S / Cmd+S | Export to PDF (continuous) |
 | Ctrl+F / Cmd+F | Find in editor |
 | Ctrl+H / Cmd+H | Find and replace |
 | Ctrl+Shift+L / Cmd+Shift+L | Toggle dark/light theme |
 | Tab | Insert tab in editor |
+
+The remaining formats (PDF A4 pages, HTML, Markdown, Images A4 ZIP) are selected from the **Export** dropdown; only continuous PDF has a keyboard shortcut.
 
 ---
 
@@ -263,11 +266,15 @@ MD2PDF supports full GitHub-Flavored Markdown (GFM) plus extensions:
 - Pure HTML, CSS, and JavaScript — no framework, no build step
 - marked.js (v12.0.1) for Markdown parsing
 - highlight.js (v11.9.0) for syntax highlighting (180+ languages)
+- mermaid (v11) for diagram rendering
 - html2canvas (v1.4.1) for image export
+- fflate (v0.8.2) for ZIP packing of A4 image exports
 - lz-string (v1.5.0) for URL compression
 - GitHub Markdown CSS (v5.5.1) as base styling
 - Hosted on Cloudflare Workers + KV for shared documents
 - Browser native print dialog for PDF export
+- PDF (A4 pages) uses `@page` rules so the print engine paginates; PDF (continuous) prints one tall page
+- Images (A4 pages) paginates in JavaScript, screenshots each page with html2canvas, and bundles them into a ZIP
 
 ---
 

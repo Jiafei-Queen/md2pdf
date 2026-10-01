@@ -100,7 +100,7 @@
             exportFailed: 'Export failed.',
             replaced: 'Replaced {n} occurrences',
             decryptFailed: 'Could not decrypt document. The link may be incomplete.',
-            encryptedShare: 'End-to-end encrypted',
+            encryptedShare: 'Encrypted at rest',
             tocTitle: 'Table of Contents',
             customCssPlaceholder: '/* Custom CSS — applied to preview & PDF */\n\n/* Example: colored headings */\n.markdown-body h1, .markdown-body h2 {\n  color: #6366f1;\n}\n\n/* Example: rounded code blocks */\n.markdown-body pre {\n  border-radius: 16px;\n}',
             editorPlaceholder: 'Write or drop your Markdown here...',
@@ -149,7 +149,7 @@
             exportFailed: 'Error al exportar.',
             replaced: '{n} ocurrencias reemplazadas',
             decryptFailed: 'No se pudo descifrar el documento. El enlace puede estar incompleto.',
-            encryptedShare: 'Cifrado de extremo a extremo',
+            encryptedShare: 'Cifrado en reposo',
             tocTitle: 'Tabla de Contenido',
             customCssPlaceholder: '/* CSS personalizado — se aplica al preview y PDF */\n\n/* Ejemplo: titulos con color */\n.markdown-body h1, .markdown-body h2 {\n  color: #6366f1;\n}\n\n/* Ejemplo: bloques de codigo redondeados */\n.markdown-body pre {\n  border-radius: 16px;\n}',
             editorPlaceholder: 'Escribe o arrastra tu Markdown aqui...',
@@ -1166,7 +1166,7 @@ All notable changes to this project will be documented in this file.
 | **11 Visual Styles** | Notion, GitHub, LaTeX, Dracula, Terminal & more |
 | **Mermaid Diagrams** | Flowcharts, sequences, Gantt charts, and more |
 | **PDF / HTML / Image** | Export in any format with one click |
-| **End-to-End Encryption** | Shared documents encrypted with AES-256-GCM |
+| **Encryption at Rest** | Shared documents stored encrypted with AES-256-GCM |
 | **AI Skill** | Installable skill for Claude, ChatGPT, Gemini |
 | **Custom CSS** | Full control over the output styling |
 | **Auto Table of Contents** | Write \`[TOC]\` or \`[TOC title="..."]\` to generate one |
@@ -1270,7 +1270,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 - [x] Syntax highlighting for 180+ languages
 - [x] Mermaid diagrams (flowchart, sequence, Gantt...)
 - [x] Auto table of contents with \`[TOC]\` or \`[TOC title="..."]\`
-- [x] End-to-end encrypted sharing
+- [x] Encrypted-at-rest sharing
 - [x] AI Skill for Claude, ChatGPT, Gemini
 - [ ] Your next document starts here
 
@@ -1280,7 +1280,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
 | Shortcut | Action |
 |---|---|
-| \`Ctrl + S\` | Export to PDF |
+| \`Ctrl + S\` | Export to PDF (continuous) |
 | \`Ctrl + F\` | Find in editor |
 | \`Ctrl + H\` | Find & replace |
 | \`Ctrl + Shift + L\` | Toggle dark/light theme |

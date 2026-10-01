@@ -109,7 +109,7 @@ This is my first document."
 ## Notes
 
 - No authentication required
-- All documents are encrypted at rest (AES-256-GCM) — the server cannot read stored content
+- Documents are encrypted at rest (AES-256-GCM) — storage holds only ciphertext, and the decryption key is never persisted server-side
 - The decryption key is in the URL hash fragment (`#k=`) and never reaches the server
 - Always share the full URL including `#k=` — without it the document is unreadable
 - The user can export the document as PDF, HTML, Markdown, or image

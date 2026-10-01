@@ -283,7 +283,7 @@ function buildTemplate(t) {
             <li style="margin-bottom: 8px;">Go to <a href="${ctaUrl}">md2pdf.studio/?template=${t.key}</a> — the template loads into the editor.</li>
             <li style="margin-bottom: 8px;">Edit the content in-place. Live preview updates as you type.</li>
             <li style="margin-bottom: 8px;">Pick a visual style from <a href="/styles/">11 options</a> — or customize with your own CSS.</li>
-            <li style="margin-bottom: 8px;">Click <strong>Export</strong> to download as PDF, HTML, Markdown, or image — or share by URL.</li>
+            <li style="margin-bottom: 8px;">Click <strong>Export</strong> to download as PDF (continuous or A4 pages), HTML, Markdown, or images — or share by URL.</li>
         </ol>
 
         <h2>All Templates</h2>

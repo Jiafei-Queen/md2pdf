@@ -418,10 +418,10 @@ export default {
                 var meta;
 
                 if (isEncrypted) {
-                    // Encrypted doc — use generic OG tags (server cannot read content)
+                    // Encrypted doc — use generic OG tags (content is ciphertext)
                     meta = {
                         title: 'Encrypted Document — MD2PDF',
-                        description: 'This document is end-to-end encrypted. Open the full link to decrypt and view it.',
+                        description: 'This document is encrypted. Open the full link to decrypt and view it.',
                     };
                 } else {
                     meta = extractMeta(content);
