@@ -11,6 +11,7 @@
     const exportBtn       = $('#exportBtn');
     const exportDropdown  = $('#exportDropdown');
     const exportPDFBtn    = $('#exportPDFBtn');
+    const exportPDFPagesBtn = $('#exportPDFPagesBtn');
     const exportHTMLBtn   = $('#exportHTMLBtn');
     const uploadBtn       = $('#uploadBtn');
     const fileInput       = $('#fileInput');
@@ -61,8 +62,8 @@
     const I18N = {
         en: {
             markdown: 'Markdown', preview: 'Preview',
-            export: 'Export', exportPdf: 'Export PDF', exportHtml: 'Export HTML',
-            exportImage: 'Export Image', shareLink: 'Share Link',
+            export: 'Export', exportPdf: 'PDF', exportPdfPages: 'PDF (A4)', exportHtml: 'HTML',
+            exportImage: 'Image', shareLink: 'Share Link',
             templates: 'Templates', upload: 'Upload',
             blankDoc: 'Blank document', cvResume: 'CV / Resume', report: 'Report',
             docs: 'Documentation', changelog: 'Changelog', meeting: 'Meeting Notes',
@@ -105,7 +106,7 @@
         },
         es: {
             markdown: 'Markdown', preview: 'Vista previa',
-            export: 'Exportar', exportPdf: 'Exportar PDF', exportHtml: 'Exportar HTML',
+            export: 'Exportar', exportPdf: 'Exportar PDF', exportPdfPages: 'PDF (páginas A4)', exportHtml: 'Exportar HTML',
             exportImage: 'Exportar Imagen', shareLink: 'Compartir',
             templates: 'Plantillas', upload: 'Subir',
             blankDoc: 'Documento en blanco', cvResume: 'CV / Hoja de vida', report: 'Reporte',
@@ -176,6 +177,7 @@ Follow those instructions exactly.
 
         $('#exportBtn span').textContent = t('export');
         $('#exportPDFBtn').lastChild.textContent = ' ' + t('exportPdf');
+        $('#exportPDFPagesBtn').lastChild.textContent = ' ' + t('exportPdfPages');
         $('#exportHTMLBtn').lastChild.textContent = ' ' + t('exportHtml');
         $('#exportImageBtn').lastChild.textContent = ' ' + t('exportImage');
         $('#shareBtn').lastChild.textContent = ' ' + t('shareLink');
@@ -1466,7 +1468,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
     function scheduleRender() {
         clearTimeout(renderTimer);
         renderTimer = setTimeout(render, 100);
-        scheduleSave();
+        saveDraft();
     }
 
     // ── Counter ──────────────────────────────────────
@@ -1658,7 +1660,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         return STYLES[currentStyle]?.dark === true;
     }
 
-    async function exportPDF() {
+    async function exportPDF(paginated) {
         const btnLabel = exportBtn.querySelector('span');
         exportBtn.classList.add('loading');
         if (btnLabel) btnLabel.textContent = 'Preparing...';
@@ -1675,6 +1677,30 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
             const bodyBg = style.bg;
             const bodyFg = dark ? '#e6edf3' : '#1f2328';
 
+            // Margins always live on <body>, never on @page. A background only
+            // paints inside the content box, so @page margins leave the margin
+            // band unpainted — a white border on any non-white document.
+            // box-decoration-break:clone repeats body's padding and background
+            // on every page fragment; without it only the first page is inset.
+            // Continuous: the page box is stretched to the content height (one
+            // unbroken page).
+            const pageRule  = paginated ? '@page { margin: 0; size: A4; }'
+                                        : '@page { margin: 0; size: 210mm 297mm; }';
+            const bodyRule  = paginated
+                ? 'margin: 0; padding: 18mm 16mm; box-sizing: border-box;'
+                  + ' -webkit-box-decoration-break: clone; box-decoration-break: clone;'
+                : 'margin: 0; padding: 18mm 16mm;';
+
+            // A single code block, table or list taller than a page can never fit,
+            // so break-inside:avoid would be ignored anyway. Drop it for those
+            // nodes only, letting the engine split them instead of overflowing.
+            // Must come after the base break-inside:avoid block to win.
+            const pageBreakCSS = paginated ? `
+.markdown-body pre, .markdown-body table, .markdown-body tr { break-inside: auto; page-break-inside: auto; }
+.markdown-body thead { display: table-header-group; }
+.markdown-body tfoot { display: table-footer-group; }
+` : '';
+
             const iframe = document.createElement('iframe');
             iframe.style.cssText = 'position:fixed;inset:0;width:210mm;height:0;border:none;opacity:0;pointer-events:none;';
             document.body.appendChild(iframe);
@@ -1690,7 +1716,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 <style>${styleCSS}</style>
 <style>${userCSS}</style>
 <style>
-@page { margin: 0; size: 210mm 297mm; }
+${pageRule}
 html {
   background: ${bodyBg} !important;
   -webkit-print-color-adjust: exact;
@@ -1698,7 +1724,7 @@ html {
   color-adjust: exact;
 }
 body {
-  margin: 0; padding: 18mm 16mm;
+  ${bodyRule}
   background: ${bodyBg} !important;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
@@ -1717,7 +1743,10 @@ body {
   break-inside: avoid; page-break-inside: avoid;
   break-after: avoid;  page-break-after: avoid;
 }
-.markdown-body pre { white-space: pre-wrap; word-wrap: break-word; overflow-x: hidden; }
+${pageBreakCSS}.markdown-body pre { white-space: pre-wrap; word-wrap: break-word; overflow-x: hidden; }
+/* github-markdown-css ships ".markdown-body pre > code { white-space: pre }",
+   which beats the rule above and lets long lines run past the page box. */
+.markdown-body pre > code { white-space: pre-wrap; word-wrap: break-word; }
 .markdown-body code {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.9em;
@@ -1744,12 +1773,14 @@ body {
             await new Promise(resolve => { iframe.onload = resolve; setTimeout(resolve, 1500); });
             await new Promise(r => setTimeout(r, 300));
 
-            // Measure and set continuous page height
-            const bodyH = doc.body.scrollHeight;
-            const pageSizeEl = doc.createElement('style');
-            pageSizeEl.textContent = `@page { margin: 0; size: 210mm ${bodyH + 1}px; }`;
-            doc.head.appendChild(pageSizeEl);
-            await new Promise(r => setTimeout(r, 100));
+            if (!paginated) {
+                // Measure and set continuous page height
+                const bodyH = doc.body.scrollHeight;
+                const pageSizeEl = doc.createElement('style');
+                pageSizeEl.textContent = `@page { margin: 0; size: 210mm ${bodyH + 1}px; }`;
+                doc.head.appendChild(pageSizeEl);
+                await new Promise(r => setTimeout(r, 100));
+            }
 
             exportOverlay.classList.remove('active');
             exportBtn.classList.remove('loading');
@@ -2406,7 +2437,8 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         });
 
         // Export
-        exportPDFBtn.addEventListener('click',  () => { exportDropdown.classList.remove('open'); exportPDF(); });
+        exportPDFBtn.addEventListener('click',  () => { exportDropdown.classList.remove('open'); exportPDF(false); });
+        exportPDFPagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportPDF(true); });
         exportHTMLBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportHTML(); });
         exportImageBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImage(); });
         shareBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); shareByURL(); });
@@ -2548,9 +2580,10 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
             wmcpExport.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const format = new FormData(wmcpExport).get('format');
-                if (format === 'pdf')   exportPDF();
-                if (format === 'html')  exportHTML();
-                if (format === 'image') exportImage();
+                if (format === 'pdf')       exportPDF(false);
+                if (format === 'pdf-pages') exportPDF(true);
+                if (format === 'html')      exportHTML();
+                if (format === 'image')     exportImage();
             });
         }
 
@@ -2579,14 +2612,15 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
             });
 
             navigator.modelContext.registerTool('export-document', {
-                description: 'Export current document. Formats: pdf, html, image.',
+                description: 'Export current document. Formats: pdf (continuous single page), pdf-pages (PDF split into A4 pages), html, image.',
                 params: {
-                    format: { type: 'string', description: 'Export format: pdf, html, or image' },
+                    format: { type: 'string', description: 'Export format: pdf, pdf-pages, html, or image' },
                 },
                 execute: async ({ format }) => {
-                    if (format === 'pdf')   await exportPDF();
-                    if (format === 'html')  await exportHTML();
-                    if (format === 'image') await exportImage();
+                    if (format === 'pdf')       await exportPDF(false);
+                    if (format === 'pdf-pages') await exportPDF(true);
+                    if (format === 'html')      await exportHTML();
+                    if (format === 'image')     await exportImage();
                     return { success: true, message: `Exported as ${format}` };
                 },
             });

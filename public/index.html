@@ -149,6 +149,10 @@
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             Export PDF
                         </button>
+                        <button class="dropdown-item" id="exportPDFPagesBtn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                            PDF (A4 pages)
+                        </button>
                         <button class="dropdown-item" id="exportHTMLBtn">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                             Export HTML
@@ -559,13 +563,14 @@
 
     <form id="wmcpExport"
           toolname="export-document"
-          tooldescription="Export the current markdown document to a file. Choose the format: pdf (styled continuous page), html (standalone file with styles inlined), or image (PNG screenshot)."
+          tooldescription="Export the current markdown document to a file. Choose the format: pdf (styled continuous single page), pdf-pages (PDF split into A4 pages), html (standalone file with styles inlined), or image (PNG screenshot)."
           toolautosubmit="true"
           hidden>
         <select name="format"
                 toolparamtitle="Export Format"
-                toolparamdescription="File format to export. Options: pdf, html, image.">
+                toolparamdescription="File format to export. Options: pdf, pdf-pages, html, image.">
             <option value="pdf">PDF</option>
+            <option value="pdf-pages">PDF (A4 pages)</option>
             <option value="html">HTML</option>
             <option value="image">Image (PNG)</option>
         </select>
