@@ -2420,6 +2420,112 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         return escaped;
     }
 
+    // The single picture of a block that is nothing but that picture: a bare
+    // <img>, or a paragraph holding one image, possibly inside one link.
+    // Anything else - prose around the picture, several pictures in one box -
+    // stays whole, because slicing it would drop every picture but the first.
+    // The link itself is not carried into the bands: a page image has no
+    // hyperlinks, and the band pins the picture to its measured size.
+    function soleImage(el) {
+        if (el.tagName === 'IMG') return el;
+        if (el.tagName !== 'P' || el.textContent.trim() !== '' || el.children.length !== 1) return null;
+        let node = el.firstElementChild;
+        if (node.tagName === 'A') {
+            if (node.textContent.trim() !== '' || node.children.length !== 1) return null;
+            node = node.firstElementChild;
+        }
+        return node.tagName === 'IMG' ? node : null;
+    }
+
+    // An image taller than a page has no line structure to split on, so it is
+    // cut into horizontal bands instead. Each band re-shows the same source
+    // image with the rest of it hidden, so the bands tile back into the
+    // original picture across pages without losing any of it.
+    // Returns null when `el` is not a standalone image, or when it already fits.
+    function splitImage(el) {
+        const img = soleImage(el);
+        if (!img) return null;
+
+        const r = img.getBoundingClientRect();
+        const w = Math.round(r.width), h = Math.round(r.height);
+        // A zero-size box means the image never loaded; there is no geometry to
+        // slice, so leave it to the oversized fallback.
+        if (!(w > 0) || !(h > PAGE_INNER_H)) return null;
+
+        const wrapTag = el.tagName === 'P' ? 'p' : 'div';
+        const bands = [];
+        for (let top = 0; top < h; top += PAGE_INNER_H) {
+            const box = document.createElement(wrapTag);
+            Object.assign(box.style, {
+                width: w + 'px', height: Math.min(PAGE_INNER_H, h - top) + 'px',
+                overflow: 'hidden', margin: '0',
+            });
+            const copy = img.cloneNode(false);
+            copy.removeAttribute('id');
+            // Inline sizes pin the band to the source pixels, and the negative
+            // offset selects which slice of the image lands inside it.
+            Object.assign(copy.style, {
+                display: 'block', width: w + 'px', height: h + 'px',
+                maxWidth: 'none', marginTop: (-top) + 'px',
+            });
+            box.appendChild(copy);
+            bands.push(box);
+        }
+        return bands;
+    }
+
+    // A blockquote is a sequence of self-contained child blocks (paragraphs,
+    // nested lists, code). Cutting between children keeps every paragraph whole
+    // and lets a long quote flow onto the next page instead of being clipped.
+    // Returns null when the quote already fits, or when one child block is
+    // itself taller than a page and cannot be cut here.
+    function splitBlockquote(el) {
+        const kids = Array.from(el.children);
+        if (kids.length < 2) return null;
+
+        // Margins collapse, so the quote's own box height understates how far
+        // it reaches. Measure the span its children actually occupy instead.
+        const outer = el.getBoundingClientRect();
+        const boxH = kids[kids.length - 1].getBoundingClientRect().bottom - outer.top;
+        if (!(boxH > PAGE_INNER_H)) return null;
+
+        // Break between children using their real laid-out offsets. Heights
+        // cannot simply be summed: sibling <p> margins collapse into the gaps
+        // between boxes, so a running total of box heights would undercount and
+        // keep the whole quote in one group. The children are already in the
+        // document, so their offsets include those collapsed margins.
+        const origin = kids[0].getBoundingClientRect().top;
+        const groups = [];
+        let cur = null;
+        for (const kid of kids) {
+            const r = kid.getBoundingClientRect();
+            if (r.height > PAGE_INNER_H) {
+                // This child alone outgrows a page (an embedded full-page image,
+                // say). Hand the whole quote to the oversized fallback.
+                return null;
+            }
+            if (cur && r.bottom - origin > PAGE_INNER_H) {
+                groups.push(cur);
+                cur = null;
+            }
+            (cur || (cur = [])).push(kid);
+        }
+        if (cur) groups.push(cur);
+        if (groups.length < 2) return null;
+
+        return groups.map((group, i) => {
+            // Clone the quote box itself so `cite`/`style`/classes survive the
+            // split; the id must not, or the parts would share one.
+            const bq = el.cloneNode(false);
+            bq.removeAttribute('id');
+            for (const kid of group) bq.appendChild(kid.cloneNode(true));
+            // Continuation quotes follow immediately after the previous one when
+            // they share a page; tighten the gap so the quoted text reads on.
+            if (i > 0) bq.style.marginTop = '-0.5em';
+            return bq;
+        });
+    }
+
     // Break the article into atoms. Lists and large tables become several
     // atoms so they can flow across pages; everything else stays whole.
     function buildAtoms(root, stage) {
@@ -2454,6 +2560,18 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
                 }
                 continue;
             }
+            // A picture or quote taller than a page is cut up front so it
+            // flows across pages instead of being clipped by the page box.
+            const imageBands = splitImage(el);
+            if (imageBands) {
+                for (const band of imageBands) atoms.push(makeAtom([band], { kind: 'block' }));
+                continue;
+            }
+            const quoteParts = splitBlockquote(el);
+            if (quoteParts) {
+                for (const part of quoteParts) atoms.push(makeAtom([part], { kind: 'block' }));
+                continue;
+            }
             // Code listings that span more than a page are pre-split into
             // line groups so they flow across pages like any other block.
             const parts = splitOversized(el, stage);
@@ -2481,6 +2599,29 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         });
         stage.appendChild(el);
         return el;
+    }
+
+    // Distance from the page's content top to the bottom of its last child:
+    // how much of the printable area the page has used up.
+    function usedOn(pg) {
+        const last = pg.lastElementChild;
+        if (!last) return 0;
+        const cs = getComputedStyle(pg);
+        const top = pg.getBoundingClientRect().top + (parseFloat(cs.paddingTop) || 0);
+        return last.getBoundingClientRect().bottom - top;
+    }
+
+    // Release a page box so an oversized block is never cut off. A block that
+    // outgrows a whole page is given the page to itself and the box is switched
+    // to grow with its content, so html2canvas rasterises the full height
+    // instead of clipping at the A4 boundary. The page's aspect ratio gives way
+    // to keeping the content, which matches the Image export, where nothing is
+    // cropped either.
+    function releaseForOversized(pg) {
+        if (usedOn(pg) <= PAGE_INNER_H) return;
+        pg.style.height = 'auto';
+        pg.style.minHeight = A4_H + 'px';
+        pg.style.overflow = 'visible';
     }
 
     // Merge a run of same-kind atoms into the single element appended to a page,
@@ -2518,10 +2659,37 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         return t;
     }
 
+    // Ordinal the first item of a list chunk has to state on its own page.
+    // Walks the source list up to that item: `value` attributes reset the count
+    // and `reversed` lists run backwards from their last item (or from `start`).
+    function firstOrdinal(src, first) {
+        const items = Array.from(src.children).filter(c => c.tagName === 'LI');
+        const idx = items.indexOf(first);
+        const step = src.hasAttribute('reversed') ? -1 : 1;
+        const start = parseInt(src.getAttribute('start'), 10);
+        let n = Number.isNaN(start) ? (step < 0 ? items.length : 1) : start;
+        for (let i = 0; i < idx; i++) {
+            const v = parseInt(items[i].getAttribute('value'), 10);
+            n = (Number.isNaN(v) ? n : v) + step;
+        }
+        return n;
+    }
+
     // Same idea for list chunks: one <ul>/<ol> per page, not one per 2 items.
+    // A page carries only a slice of the source list, so `type`/`reversed` are
+    // copied verbatim and `start` is restated for the first item of the slice.
+    // Without this every page restarts the count at 1. Stating `start` is the
+    // same as the browser default for a slice that begins at its first item,
+    // so it is written unconditionally.
     function packListRun(run) {
-        const list = document.createElement(run[0].nodes[0].parentElement.tagName.toLowerCase());
-        list.removeAttribute('id');
+        const src = run[0].nodes[0].parentElement;
+        const list = document.createElement(src.tagName.toLowerCase());
+        for (const a of ['type', 'reversed']) {
+            if (src.hasAttribute(a)) list.setAttribute(a, src.getAttribute(a));
+        }
+        if (src.tagName === 'OL') {
+            list.setAttribute('start', String(firstOrdinal(src, run[0].nodes[0])));
+        }
         for (const atom of run) {
             for (const li of atom.nodes) list.appendChild(li.cloneNode(true));
         }
@@ -2535,8 +2703,9 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
      * the page, then rolling back when it does not fit. Predicting heights in a
      * detached holder is unreliable here because margins collapse, list
      * spacing depends on the wrapper, and styles resolve against the real page
-     * context. A node too tall for even an empty page is placed anyway and
-     * clipped by the page box, so no content is ever dropped.
+     * context. A node too tall for even an empty page is placed anyway, and
+     * its page grows past the A4 height so the overflowing part is rasterised
+     * instead of clipped away.
      */
     function paginateIntoPages(atoms, stage, bg) {
         const pages = [];
@@ -2544,14 +2713,6 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
         if (!atoms.length) { newPage(); return pages; }
 
         let page = newPage();
-
-        const usedOn = (pg) => {
-            const last = pg.lastElementChild;
-            if (!last) return 0;
-            const cs = getComputedStyle(pg);
-            const top = pg.getBoundingClientRect().top + (parseFloat(cs.paddingTop) || 0);
-            return last.getBoundingClientRect().bottom - top;
-        };
 
         // Try to append `node` to `pg`; roll back and return false if it does
         // not fit. When `allowOverflow` is set the node is kept regardless.
@@ -2575,6 +2736,7 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
                 if (!tryPlace(page, node, false)) {
                     if (usedOn(page) > 0) page = newPage();
                     page.appendChild(node);
+                    releaseForOversized(page);
                 }
 
                 let consumed = 1;
@@ -2596,6 +2758,7 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
                     const nextRun = [atoms[j]];
                     const nextNode = mergeRun(atom.kind, nextRun);
                     page.appendChild(nextNode);
+                    releaseForOversized(page);
                     run = nextRun;
                     node = nextNode;
                     consumed++;
@@ -2608,13 +2771,14 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
             const isHeading = HEADINGS.has(atom.nodes[0].tagName);
 
             // Place, rolling back to a fresh page when the current one is full.
-            // A node taller than a whole page can never fit anywhere: place it
-            // anyway and let the page box clip it, so content is never dropped
-            // silently. The forced retry also covers the oversized case, where
-            // even the fresh page cannot take it. Same rule for table/list runs.
+            // A node taller than a whole page can never fit anywhere: it gets a
+            // page to itself and releaseForOversized lets that box grow past the
+            // A4 height, so the overflowing part is rasterised rather than
+            // clipped away. Same rule for table/list runs.
             if (!tryPlace(page, node, false)) {
                 if (usedOn(page) > 0) page = newPage();
                 tryPlace(page, node, true);
+                releaseForOversized(page);
             }
 
             // Keep-with-next: a heading must not be left at the foot of a page
