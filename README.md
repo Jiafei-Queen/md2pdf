@@ -72,6 +72,9 @@ npx wrangler dev
 | `Ctrl + F` | Find |
 | `Ctrl + H` | Find & Replace |
 | `Ctrl + Shift + L` | Toggle dark/light theme |
+| `Ctrl + Alt + T` | New document tab |
+| `Ctrl + Shift + W` | Close current tab |
+| `Ctrl + Tab` / `Ctrl + Shift + Tab` | Next / previous tab |
 | `F11` | Toggle fullscreen |
 | `Tab` | Insert tab in editor |
 

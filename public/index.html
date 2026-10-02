@@ -181,6 +181,27 @@
 
         <!-- Workspace -->
         <main class="workspace">
+            <!-- Open documents sidebar -->
+            <aside class="doc-sidebar" id="docSidebar">
+                <div class="doc-sidebar-header">
+                    <button class="doc-sidebar-toggle" id="docSidebarToggle"
+                            title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
+                        </svg>
+                    </button>
+                    <span class="doc-sidebar-title">Documents</span>
+                </div>
+                <div class="doc-scroll">
+                    <div class="doc-list" id="docTabs" role="tablist" aria-label="Open documents"></div>
+                    <button class="doc-new-btn" id="docNewBtn" title="New document (Ctrl+Alt+T)" aria-label="New document">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                    </button>
+                </div>
+            </aside>
+
             <!-- Editor Pane -->
             <section class="pane editor-pane" id="editorPane">
                 <div class="pane-header">

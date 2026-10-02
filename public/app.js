@@ -57,7 +57,14 @@
     let currentLang     = 'en';
     let renderTimer     = null;
     let saveTimer       = null;
+    // Derived from the active doc — the single source of truth is docs[].shared
     let isSharedView    = false;
+
+    // ── Doc store ─────────────────────────────────────
+    // docs: [{ id, name, content, style, selStart, selEnd, scrollRatio, shared }]
+    let docs = [];
+    let activeDocId = null;   // null means the editor is detached (no tab)
+    let _nextDocId = 1;
 
     // ── i18n ─────────────────────────────────────────
 
@@ -98,6 +105,10 @@
             imgDownloaded: 'Image downloaded', htmlDownloaded: 'HTML downloaded',
             mdDownloaded: 'Markdown downloaded',
             exportFailed: 'Export failed.',
+            storageFull: 'Storage full — some changes may not persist',
+            closeTab: 'Close tab',
+            sidebarTitle: 'Documents', newDocumentTab: 'New document',
+            collapseSidebar: 'Collapse sidebar', expandSidebar: 'Expand sidebar',
             replaced: 'Replaced {n} occurrences',
             decryptFailed: 'Could not decrypt document. The link may be incomplete.',
             encryptedShare: 'Encrypted at rest',
@@ -147,6 +158,10 @@
             imgDownloaded: 'Imagen descargada', htmlDownloaded: 'HTML descargado',
             mdDownloaded: 'Markdown descargado',
             exportFailed: 'Error al exportar.',
+            storageFull: 'Almacenamiento lleno — algunos cambios podrían no guardarse',
+            closeTab: 'Cerrar pestaña',
+            sidebarTitle: 'Documentos', newDocumentTab: 'Nuevo documento',
+            collapseSidebar: 'Contraer barra lateral', expandSidebar: 'Expandir barra lateral',
             replaced: '{n} ocurrencias reemplazadas',
             decryptFailed: 'No se pudo descifrar el documento. El enlace puede estar incompleto.',
             encryptedShare: 'Cifrado en reposo',
@@ -203,6 +218,21 @@ Follow those instructions exactly.
         document.querySelector('[data-template="docs"]').textContent = t('docs');
         document.querySelector('[data-template="changelog"]').textContent = t('changelog');
         document.querySelector('[data-template="meeting"]').textContent = t('meeting');
+
+        // Sidebar
+        const _sbTitle = document.querySelector('.doc-sidebar-title');
+        if (_sbTitle) _sbTitle.textContent = t('sidebarTitle');
+        const _newBtn = document.getElementById('docNewBtn');
+        if (_newBtn) {
+            _newBtn.title = t('newDocumentTab') + ' (Ctrl+Alt+T)';
+            _newBtn.setAttribute('aria-label', t('newDocumentTab'));
+        }
+        const _sbToggle = document.getElementById('docSidebarToggle');
+        if (_sbToggle) {
+            const _collapsed = document.getElementById('docSidebar').classList.contains('collapsed');
+            _sbToggle.title = _collapsed ? t('expandSidebar') : t('collapseSidebar');
+            _sbToggle.setAttribute('aria-label', _sbToggle.title);
+        }
 
         // Find & Replace
         $('#findInput').placeholder = t('find');
@@ -1326,6 +1356,84 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
     const TOC_PLACEHOLDER = '\u00ABTOC_PLACEHOLDER\u00BB';
 
+    // Rebuilt wholesale on every call. Names come from user input, so they are
+    // set through textContent — never interpolated into HTML. The list always
+    // renders, even with a single document, so the "+" entry point stays reachable.
+    // Each row also carries an initial used by the collapsed rail.
+    function docInitial(name) {
+        const m = String(name || '').trim().match(/[A-Za-zÀ-ɏ一-鿿0-9]/);
+        return m ? m[0].toUpperCase() : '?';
+    }
+
+    function renderTabs() {
+        const list = document.getElementById('docTabs');
+        if (!list) return;
+        list.innerHTML = '';
+        const frag = document.createDocumentFragment();
+        docs.forEach(d => {
+            const tab = document.createElement('div');
+            tab.className = 'doc-tab' + (d.id === activeDocId ? ' active' : '');
+            tab.dataset.docId = String(d.id);
+            tab.setAttribute('role', 'tab');
+            tab.setAttribute('aria-selected', d.id === activeDocId ? 'true' : 'false');
+            tab.title = d.name;
+
+            const initial = document.createElement('span');
+            initial.className = 'doc-tab-initial';
+            initial.textContent = docInitial(d.name);
+            initial.setAttribute('aria-hidden', 'true');
+            tab.appendChild(initial);
+
+            const name = document.createElement('span');
+            name.className = 'doc-tab-name';
+            name.textContent = d.name;
+            tab.appendChild(name);
+
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'doc-tab-close';
+            close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+            close.setAttribute('aria-label', t('closeTab') + ': ' + d.name);
+            tab.appendChild(close);
+
+            frag.appendChild(tab);
+        });
+        list.appendChild(frag);
+    }
+
+    function setSidebarCollapsed(collapsed) {
+        const side = document.getElementById('docSidebar');
+        if (!side) return;
+        side.classList.toggle('collapsed', !!collapsed);
+        const toggle = document.getElementById('docSidebarToggle');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            toggle.title = collapsed ? t('expandSidebar') : t('collapseSidebar');
+            toggle.setAttribute('aria-label', toggle.title);
+        }
+        localStorage.setItem('md2pdf-sidebar-collapsed', collapsed ? '1' : '0');
+    }
+
+    // Removes the tab from the session. Persisted content of the closed doc is
+    // dropped too — the store only ever mirrors the live docs array.
+    function closeDoc(id) {
+        if (docs.length <= 1) return;
+        const index = docs.findIndex(d => d.id === id);
+        if (index === -1) return;
+
+        const wasActive = docs[index].id === activeDocId;
+        if (wasActive) captureActive();
+        docs.splice(index, 1);
+
+        if (wasActive) {
+            const next = docs[Math.min(index, docs.length - 1)];
+            activateDoc(next.id);
+        } else {
+            renderTabs();
+            saveDraft();
+        }
+    }
+
     function render() {
         const src = editor.value.trim();
         if (!src) {
@@ -1481,6 +1589,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
     function scheduleRender() {
         clearTimeout(renderTimer);
         renderTimer = setTimeout(render, 100);
+        syncFromEditor();
         saveDraft();
     }
 
@@ -1538,11 +1647,13 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
     // ── Styles ───────────────────────────────────────
 
-    function applyStyle(key) {
+    function applyStyle(key, opts) {
         currentStyle = key;
         styleSelect.value = key;
         styleOverride.textContent = STYLES[key]?.css || '';
-        localStorage.setItem('md2pdf-style', key);
+        // md2pdf-style only records the last-used style (the default for a new
+        // doc). Tab switches must not overwrite it.
+        if (!opts || opts.persist !== false) localStorage.setItem('md2pdf-style', key);
 
         // Re-apply theme CSS to toggle dark/light base for the preview
         applyTheme(getTheme());
@@ -1563,11 +1674,10 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
     function loadTemplate(key) {
         const tpl = TEMPLATES[key];
         if (tpl === undefined) return;
-        editor.value = tpl;
-        currentFileName = key === 'blank' ? 'untitled.md' : `${key}.md`;
-        fileNameEl.value = currentFileName;
-        render();
-        saveDraft();
+        createDocAndActivate({
+            name: key === 'blank' ? 'untitled.md' : `${key}.md`,
+            content: tpl,
+        });
         showToast(key === 'blank' ? t('newDocument') : t('templateLoaded'));
     }
 
@@ -1577,11 +1687,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            editor.value = e.target.result;
-            currentFileName = file.name;
-            fileNameEl.value = file.name;
-            render();
-            saveDraft();
+            createDocAndActivate({ name: file.name, content: e.target.result, dedup: true });
         };
         reader.readAsText(file);
     }
@@ -1598,26 +1704,232 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         });
     }
 
+    // ── Doc store ─────────────────────────────────────
+
+    function activeDoc() {
+        return docs.find(d => d.id === activeDocId) || null;
+    }
+
+    // Monotonic id generator. Non-empty content maps onto an existing tab when
+    // there already is one, so re-dropping a file or re-opening a template
+    // focuses that document instead of duplicating it. Blank documents and
+    // explicit copies (dedup: false) always get their own tab.
+    function newDocId(content, dedup) {
+        if (dedup !== false && typeof content === 'string' && content !== '') {
+            const dup = docs.find(d => d.content === content);
+            if (dup) return dup.id;
+        }
+        return _nextDocId++;
+    }
+
+    function scrollRatio() {
+        const max = editor.scrollHeight - editor.clientHeight;
+        return max > 0 ? editor.scrollTop / max : 0;
+    }
+
+    // Flush the editor into the active doc before anything reads the doc.
+    function captureActive() {
+        const d = activeDoc();
+        if (!d) return;
+        d.content = editor.value;
+        d.name = currentFileName;
+        d.style = currentStyle;
+        d.selStart = editor.selectionStart;
+        d.selEnd = editor.selectionEnd;
+        d.scrollRatio = scrollRatio();
+    }
+
+    // Keep the in-memory doc in step with typing without a full capture.
+    function syncFromEditor() {
+        const d = activeDoc();
+        if (d) d.content = editor.value;
+    }
+
+    // preview-only / shared-locked travel with the doc: the workspace layout is
+    // not global state, it belongs to whichever tab is active.
+    function applySharedLock(shared) {
+        isSharedView = !!shared;
+        workspace.classList.toggle('shared-locked', isSharedView);
+        workspace.classList.toggle('preview-only', isSharedView);
+        const lockBtn = document.getElementById('sharedLock');
+        if (lockBtn) {
+            lockBtn.hidden = !isSharedView;
+            if (isSharedView) { lockBtn.title = t('sharedLockTip'); lockBtn.setAttribute('aria-label', t('sharedLockTip')); }
+        }
+        viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+        const target = viewToggle.querySelector(isSharedView ? '[data-view="preview"]' : '[data-view="split"]');
+        if (target) target.classList.add('active');
+    }
+
+    function activateDoc(id, opts) {
+        const restoreView = !opts || opts.restoreView !== false;
+        const d = docs.find(doc => doc.id === id);
+        if (!d || d.id === activeDocId) { if (d) renderTabs(); return; }
+
+        captureActive();
+        activeDocId = d.id;
+        currentFileName = d.name;
+        editor.value = d.content;
+        fileNameEl.value = d.name;
+        applySharedLock(d.shared);
+
+        // Find matches are offsets into the previous document — drop them
+        // without closeFind(), which would steal focus into the editor.
+        findPanel.classList.remove('open');
+        replaceRow.classList.remove('open');
+        findMatches = [];
+        findIdx = -1;
+        findCount.textContent = '';
+
+        const wantStyle = opts && opts.style;
+        if (wantStyle && STYLES[wantStyle] && wantStyle !== currentStyle) {
+            applyStyle(wantStyle);
+        } else if (d.style !== currentStyle) {
+            // applyStyle → applyTheme → render() closes this branch.
+            applyStyle(d.style, { persist: false });
+        } else {
+            currentStyle = d.style;
+            styleSelect.value = d.style;
+            styleOverride.textContent = STYLES[d.style]?.css || '';
+            render();
+        }
+
+        if (restoreView) {
+            requestAnimationFrame(() => {
+                try {
+                    editor.setSelectionRange(d.selStart || 0, d.selEnd || 0);
+                    const max = editor.scrollHeight - editor.clientHeight;
+                    if (max > 0 && d.scrollRatio) editor.scrollTop = d.scrollRatio * max;
+                } catch (_) {}
+            });
+        }
+        renderTabs();
+        saveDraft();
+    }
+
+    function createDocAndActivate(opts) {
+        const content = opts.content != null ? opts.content : '';
+        const id = newDocId(content, opts.dedup);
+        const existing = docs.find(d => d.id === id);
+        if (existing) { activateDoc(existing.id); return existing; }
+
+        const d = {
+            id,
+            name: opts.name || 'untitled.md',
+            content,
+            style: opts.style || currentStyle,
+            selStart: 0,
+            selEnd: 0,
+            scrollRatio: 0,
+            shared: !!opts.shared,
+        };
+        docs.push(d);
+        activateDoc(d.id, { style: opts.style });
+        return d;
+    }
+
     // ── localStorage ─────────────────────────────────
+
+    const DOCS_KEY = 'md2pdf-docs';
+    const DOC_VIEW_KEY = 'md2pdf-doc-view';
 
     function saveDraft() {
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
-            localStorage.setItem('md2pdf-draft', editor.value);
-            localStorage.setItem('md2pdf-filename', currentFileName);
+            captureActive();
+            const d = activeDoc();
+            if (!d) return;                    // detached editor — nothing to persist
+            const list = docs.map(doc => ({
+                id: doc.id, name: doc.name, content: doc.content, style: doc.style, shared: !!doc.shared,
+            }));
+            const view = {};
+            docs.forEach(doc => {
+                view[doc.id] = { selStart: doc.selStart || 0, selEnd: doc.selEnd || 0, scrollRatio: doc.scrollRatio || 0 };
+            });
+            const payload = JSON.stringify({ activeId: activeDocId, list });
+            if (payload.length > 4 * 1024 * 1024) { showToast(t('storageFull')); return; }
+            try {
+                localStorage.setItem(DOCS_KEY, payload);
+                localStorage.setItem(DOC_VIEW_KEY, JSON.stringify(view));
+            } catch (_) {
+                // Quota exceeded — keep editing, just tell the user it won't persist.
+                showToast(t('storageFull'));
+            }
         }, 800);
     }
 
-    function restoreDraft() {
+    // Loads a doc into the editor without a tab switch (used during boot).
+    function loadDocInto(d) {
+        activeDocId = d.id;
+        currentFileName = d.name;
+        editor.value = d.content;
+        fileNameEl.value = d.name;
+        applySharedLock(d.shared);
+        if (d.style !== currentStyle) applyStyle(d.style, { persist: false });
+    }
+
+    function restoreDocs() {
+        const raw = localStorage.getItem(DOCS_KEY);
+        if (raw) {
+            try {
+                const saved = JSON.parse(raw);
+                if (Array.isArray(saved.list) && saved.list.length) {
+                    saved.list.forEach(item => {
+                        docs.push({
+                            id: item.id,
+                            name: item.name || 'untitled.md',
+                            content: item.content || '',
+                            style: item.style || currentStyle,
+                            selStart: 0, selEnd: 0, scrollRatio: 0,
+                            shared: !!item.shared,
+                        });
+                    });
+                    _nextDocId = docs.reduce((m, doc) => Math.max(m, doc.id + 1), 1);
+
+                    const view = (() => {
+                        try { return JSON.parse(localStorage.getItem(DOC_VIEW_KEY) || '{}'); } catch (_) { return {}; }
+                    })();
+                    docs.forEach(doc => {
+                        const v = view[doc.id];
+                        if (v) {
+                            doc.selStart = v.selStart || 0;
+                            doc.selEnd = v.selEnd || 0;
+                            doc.scrollRatio = v.scrollRatio || 0;
+                        }
+                    });
+
+                    loadDocInto(docs.find(doc => doc.id === saved.activeId) || docs[0]);
+                    return true;
+                }
+            } catch (_) {}
+        }
+
+        // One-off migration from the single-slot keys. The legacy keys are left
+        // in place so a rollback still finds its draft.
         const draft = localStorage.getItem('md2pdf-draft');
         if (draft !== null && draft !== '') {
-            editor.value = draft;
-            currentFileName = localStorage.getItem('md2pdf-filename') || 'untitled.md';
-            fileNameEl.value = currentFileName;
+            docs.push({
+                id: _nextDocId++,
+                name: localStorage.getItem('md2pdf-filename') || 'untitled.md',
+                content: draft,
+                style: localStorage.getItem('md2pdf-style') || currentStyle,
+                selStart: 0, selEnd: 0, scrollRatio: 0, shared: false,
+            });
+            loadDocInto(docs[0]);
             showToast(t('draftRestored'));
             return true;
         }
-        return false;
+
+        // No stored session at all — start from the sample document.
+        docs.push({
+            id: _nextDocId++,
+            name: 'untitled.md',
+            content: SAMPLE,
+            style: currentStyle,
+            selStart: 0, selEnd: 0, scrollRatio: 0, shared: false,
+        });
+        loadDocInto(docs[0]);
+        return true;
     }
 
     // ── Toast ────────────────────────────────────────
@@ -2483,18 +2795,13 @@ body { width: ${PAGE_INNER_W}px; }
         });
     }
 
-    // Share state: map of content hash → { id, editKey }
+    // Share state: map of doc id → { id, editKey, encKey }. The doc id is stable
+    // across renames and unique per tab, so two same-named tabs never collide.
     function getShareMap() {
         try { return JSON.parse(localStorage.getItem('md2pdf-shares') || '{}'); } catch (_) { return {}; }
     }
     function saveShareMap(map) {
         localStorage.setItem('md2pdf-shares', JSON.stringify(map));
-    }
-
-    // Simple hash for change detection
-    async function contentHash(text) {
-        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-        return Array.from(new Uint8Array(buf).slice(0, 8), b => b.toString(16).padStart(2, '0')).join('');
     }
 
     // ── E2EE (AES-256-GCM) ──────────────────────────
@@ -2560,7 +2867,8 @@ body { width: ${PAGE_INNER_W}px; }
 
         try {
             const shares = getShareMap();
-            const docKey = currentFileName;
+            // Keyed by doc id, not file name — two tabs may share a name.
+            const docKey = String(activeDocId);
 
             // Check if we have an existing share for this document
             if (shares[docKey]) {
@@ -2618,20 +2926,11 @@ body { width: ${PAGE_INNER_W}px; }
     }
 
     function loadSharedContent(content) {
-        editor.value = content;
-        currentFileName = 'shared.md';
-        fileNameEl.value = currentFileName;
+        // Opens as its own read-only tab — a share link must never hijack the
+        // document the user is already working on, even if its content already
+        // has a tab.
+        createDocAndActivate({ name: 'shared.md', content, shared: true, dedup: false });
         showToast(t('sharedDocLoaded'));
-
-        // Mark as shared so the editor stays locked until the user forks a copy.
-        // URL is left intact so F5 re-fetches the latest version from the creator.
-        isSharedView = true;
-        workspace.classList.add('preview-only', 'shared-locked');
-        viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-        const previewBtn = viewToggle.querySelector('[data-view="preview"]');
-        if (previewBtn) previewBtn.classList.add('active');
-        const lockBtn = document.getElementById('sharedLock');
-        if (lockBtn) { lockBtn.hidden = false; lockBtn.title = t('sharedLockTip'); }
     }
 
     function openForkModal() {
@@ -2647,13 +2946,11 @@ body { width: ${PAGE_INNER_W}px; }
     }
 
     function forkToLocalCopy() {
-        // Turn a shared read-only doc into a local editable copy.
-        isSharedView = false;
+        // The read-only tab stays read-only; the fork is a new editable tab.
+        const src = activeDoc();
+        const content = src ? src.content : editor.value;
         workspace.classList.remove('preview-only', 'shared-locked');
-        currentFileName = 'copy-of-shared.md';
-        fileNameEl.value = currentFileName;
-        const lockBtn = document.getElementById('sharedLock');
-        if (lockBtn) lockBtn.hidden = true;
+        createDocAndActivate({ name: 'copy-of-shared.md', content, dedup: false });
         // Drop the /s/:id URL so F5 no longer re-fetches the original over local edits.
         history.replaceState(null, '', '/');
         // Switch toolbar back to split view.
@@ -2872,7 +3169,8 @@ body { width: ${PAGE_INNER_W}px; }
 
     function initEditor() {
         editor.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
+            // Ctrl+Tab cycles document tabs — it must not insert indentation.
+            if (e.key === 'Tab' && !(e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 const s = editor.selectionStart;
                 const end = editor.selectionEnd;
@@ -2894,7 +3192,36 @@ body { width: ${PAGE_INNER_W}px; }
             if (mod && e.key === 'f') { e.preventDefault(); openFind(false); }
             if (mod && e.key === 'h') { e.preventDefault(); openFind(true); }
             if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
+
+            // Tab shortcuts stay out of text fields — Ctrl+T / Ctrl+W are
+            // reserved by the browser, so these use Alt. The editor itself is
+            // exempt: it is the document surface, not a settings field.
+            const inEditable = e.target instanceof Element
+                && e.target !== editor
+                && !!e.target.closest('input, textarea, [contenteditable]');
+            if (mod && e.altKey && (e.key === 'T' || e.key === 't')) {
+                if (inEditable) return;
+                e.preventDefault();
+                createDocAndActivate({ name: 'untitled.md', content: '' });
+            }
+            if (mod && e.shiftKey && (e.key === 'W' || e.key === 'w')) {
+                if (inEditable) return;
+                e.preventDefault();
+                closeDoc(activeDocId);
+            }
+            if (mod && e.key === 'Tab' && docs.length > 1) {
+                if (inEditable) return;
+                e.preventDefault();
+                cycleActiveDoc(e.shiftKey ? -1 : 1);
+            }
         });
+    }
+
+    function cycleActiveDoc(step) {
+        const i = docs.findIndex(d => d.id === activeDocId);
+        if (i === -1) { activateDoc(docs[0].id); return; }
+        const next = (i + step + docs.length) % docs.length;
+        activateDoc(docs[next].id);
     }
 
     // ── Wire up events ───────────────────────────────
@@ -2951,19 +3278,52 @@ body { width: ${PAGE_INNER_W}px; }
             });
         });
 
+        // Document list — one delegated listener, no per-item binding
+        const docTabs = document.getElementById('docTabs');
+        if (docTabs) {
+            docTabs.addEventListener('click', (e) => {
+                const tab = e.target.closest('.doc-tab');
+                if (!tab) return;
+                const id = Number(tab.dataset.docId);
+                if (e.target.closest('.doc-tab-close')) {
+                    if (docs.length > 1) closeDoc(id);
+                    return;
+                }
+                activateDoc(id);
+            });
+        }
+
+        // Sidebar: new document, collapse toggle
+        const docNewBtn = document.getElementById('docNewBtn');
+        if (docNewBtn) {
+            docNewBtn.addEventListener('click', () => {
+                createDocAndActivate({ name: 'untitled.md', content: '' });
+                editor.focus();
+            });
+        }
+        const docSidebarToggle = document.getElementById('docSidebarToggle');
+        if (docSidebarToggle) {
+            docSidebarToggle.addEventListener('click', () => {
+                const side = document.getElementById('docSidebar');
+                setSidebarCollapsed(!side.classList.contains('collapsed'));
+            });
+        }
+
         // Copy buttons are bound dynamically in buildPromptsTab/buildApiTab
 
         // Editable file name
-        fileNameEl.addEventListener('change', () => {
+        const commitFileName = () => {
             const val = fileNameEl.value.trim();
-            if (val) {
-                currentFileName = val.endsWith('.md') ? val : val + '.md';
-            } else {
-                currentFileName = 'untitled.md';
-            }
+            currentFileName = val
+                ? (val.endsWith('.md') ? val : val + '.md')
+                : 'untitled.md';
             fileNameEl.value = currentFileName;
+            const d = activeDoc();
+            if (d) d.name = currentFileName;
+            renderTabs();
             saveDraft();
-        });
+        };
+        fileNameEl.addEventListener('change', commitFileName);
         fileNameEl.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); fileNameEl.blur(); }
             if (e.key === 'Escape') { fileNameEl.value = currentFileName; fileNameEl.blur(); }
@@ -2973,16 +3333,7 @@ body { width: ${PAGE_INNER_W}px; }
             fileNameEl.value = name;
             fileNameEl.select();
         });
-        fileNameEl.addEventListener('blur', () => {
-            const val = fileNameEl.value.trim();
-            if (val) {
-                currentFileName = val.endsWith('.md') ? val : val + '.md';
-            } else {
-                currentFileName = 'untitled.md';
-            }
-            fileNameEl.value = currentFileName;
-            saveDraft();
-        });
+        fileNameEl.addEventListener('blur', commitFileName);
 
         // Fullscreen
         fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -3042,9 +3393,13 @@ body { width: ${PAGE_INNER_W}px; }
                 const fd = new FormData(wmcpConvert);
                 const md = fd.get('markdown');
                 const style = fd.get('style');
-                if (md) { editor.value = md; currentFileName = 'agent.md'; fileNameEl.value = currentFileName; }
-                if (style && STYLES[style]) applyStyle(style);
-                render();
+                if (md) {
+                    createDocAndActivate({ name: 'agent.md', content: md, style, dedup: false });
+                } else if (style && STYLES[style]) {
+                    applyStyle(style);
+                    const cur = activeDoc();
+                    if (cur) cur.style = style;
+                }
                 saveDraft();
             });
         }
@@ -3078,9 +3433,13 @@ body { width: ${PAGE_INNER_W}px; }
                     style:    { type: 'string', description: 'Visual style (default: notion)' },
                 },
                 execute: async ({ markdown, style }) => {
-                    if (markdown) { editor.value = markdown; currentFileName = 'agent.md'; fileNameEl.value = currentFileName; }
-                    if (style && STYLES[style]) applyStyle(style);
-                    render();
+                    if (markdown) {
+                        createDocAndActivate({ name: 'agent.md', content: markdown, style, dedup: false });
+                    } else if (style && STYLES[style]) {
+                        applyStyle(style);
+                        const cur = activeDoc();
+                        if (cur) cur.style = style;
+                    }
                     saveDraft();
                     return { success: true, message: 'Content rendered' };
                 },
@@ -3166,18 +3525,17 @@ body { width: ${PAGE_INNER_W}px; }
         const savedCSS = localStorage.getItem('md2pdf-custom-css');
         if (savedCSS) { customCSSInput.value = savedCSS; applyCustomCSS(); }
 
-        // Check for shared URL first, then ?template=, then draft, then sample
-        let loaded = false;
-        try { loaded = await loadFromURL(); } catch (_) {}
-        if (!loaded && hasValidTemplate) {
-            loadTemplate(resolvedTemplate);
-            loaded = true;
-        }
-        if (!loaded) {
-            if (!restoreDraft()) {
-                editor.value = SAMPLE;
-            }
-        }
+        // Restore sidebar state (language is already applied, so labels localize)
+        setSidebarCollapsed(localStorage.getItem('md2pdf-sidebar-collapsed') === '1');
+
+        // Restore the open-document session first, so share / template URLs
+        // stack on top of the user's own tabs instead of replacing them.
+        restoreDocs();
+        renderTabs();
+
+        // Then a shared URL or ?template= adds its own tab.
+        try { await loadFromURL(); } catch (_) {}
+        if (hasValidTemplate) loadTemplate(resolvedTemplate);
 
         render();
         initEditor();

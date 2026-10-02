@@ -255,7 +255,12 @@ MD2PDF supports full GitHub-Flavored Markdown (GFM) plus extensions:
 | Ctrl+F / Cmd+F | Find in editor |
 | Ctrl+H / Cmd+H | Find and replace |
 | Ctrl+Shift+L / Cmd+Shift+L | Toggle dark/light theme |
+| Ctrl+Alt+T / Cmd+Alt+T | New document tab |
+| Ctrl+Shift+W / Cmd+Shift+W | Close current tab |
+| Ctrl+Tab / Cmd+Tab | Next tab (Shift for previous) |
 | Tab | Insert tab in editor |
+
+Each open document appears in the left sidebar, where you can create a new one with the **+** button, switch between them, close them, or collapse the sidebar. When collapsed, each document is reduced to its first letter with a close button on hover. Every document keeps its own content, file name, and visual style, and all of them are restored after a reload.
 
 The remaining formats (PDF A4 pages, HTML, Markdown, Images A4 ZIP) are selected from the **Export** dropdown; only continuous PDF has a keyboard shortcut.
 
