@@ -2029,7 +2029,6 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
             const appStylesheet = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
                 .find(link => new URL(link.href).pathname === '/style.css');
             if (!appStylesheet) throw new Error('Export stylesheet is unavailable.');
-            const bounds = preview.getBoundingClientRect();
             const { dark, appDark, bg, fg } = resolveExportTheme();
             return {
                 content: preview.innerHTML,
@@ -2038,8 +2037,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
                 previewStyleCSS: styleOverride.textContent,
                 userCSS: customCSSInput.value || '',
                 dark, appDark, bg, fg,
-                previewWidth: bounds.width > 0 ? bounds.width : 960,
-                previewMinHeight: bounds.height > 0 ? bounds.height : 0,
+                imageWidth: IMAGE_EXPORT_W,
                 appStylesheetURL: appStylesheet.href,
                 fontStylesheetURLs: Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
                     .filter(link => link.href.startsWith('https://fonts.googleapis.com/'))
@@ -2104,6 +2102,79 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
                 throw new Error('Table is too wide to export without clipping.');
             }
         }
+    }
+
+    // html2canvas positions every text segment with DOM Range measurements but
+    // paints it with canvas fillText. Where the two disagree on glyph advances
+    // (macOS Firefox paints ~0.7-1.3px per glyph wider than layout), each
+    // segment overruns into the next one and characters visibly overlap in the
+    // exported image. Measurement happens in a cloned document with its own
+    // Range realm, so the correction hooks in through html2canvas's onclone
+    // callback: single-line segments are re-measured with canvas metrics and
+    // placed just after the previous segment's painted edge, keeping the DOM
+    // gap. Positioning then uses the same metrics as painting, so overlap is
+    // impossible. Segments spanning lines are returned untouched — html2canvas
+    // splits those per grapheme, one line at a time, which lands back here.
+    // On engines where DOM and canvas agree (drift = 0) the returned boxes are
+    // identical to the native ones, so consistent platforms are unaffected.
+    function alignTextToCanvasAdvances(doc) {
+        const view = doc.defaultView;
+        if (!view || !view.Range) return;
+        const meter = doc.createElement('canvas').getContext('2d');
+        const nativeGetClientRects = view.Range.prototype.getClientRects;
+        // Inline boxes on one visual line report slightly different rect
+        // tops (per-font metrics, device-pixel snapping) while real wrapped
+        // lines sit a full line height apart, so lines are matched within a
+        // few px. Exact float matching used to break the drift chain at
+        // inline box boundaries (e.g. the end of a styled link), throwing the
+        // next word back to its uncorrected position on top of the painted
+        // text before it.
+        const LINE_TOL = 4;
+        let lastRun = null;
+
+        view.Range.prototype.getClientRects = function () {
+            const rects = nativeGetClientRects.call(this);
+            if (this.startContainer !== this.endContainer ||
+                this.startContainer.nodeType !== Node.TEXT_NODE) return rects;
+            const text = this.toString();
+            const boxes = Array.from(rects).filter(rect => rect.width !== 0);
+            if (!text.trim() || boxes.length === 0) return rects;
+
+            const first = boxes[0];
+            const firstMid = first.top + first.height / 2;
+            const wrapped = boxes.some(
+                rect => Math.abs(rect.top + rect.height / 2 - firstMid) > LINE_TOL);
+            if (wrapped) return rects;
+
+            // A single line may be split into several rects (inline box
+            // boundaries, pixel snapping); the segment spans their union.
+            let domLeft = Infinity;
+            let domRight = -Infinity;
+            for (const rect of boxes) {
+                domLeft = Math.min(domLeft, rect.left);
+                domRight = Math.max(domRight, rect.left + rect.width);
+            }
+
+            const host = this.startContainer.parentElement;
+            if (!host) return rects;
+            const style = view.getComputedStyle(host);
+            meter.font = [style.fontStyle, style.fontVariant, style.fontWeight,
+                style.fontSize, style.fontFamily].join(' ');
+            const paintedWidth = meter.measureText(text).width;
+
+            // Positions stay anchored to the DOM's left edge (and its gaps)
+            // but carry the accumulated over-paint of earlier segments on the
+            // same line, so each segment starts after the previous painted
+            // edge: paintedRight <= next.x. The invariant holds
+            // unconditionally — including across table cells on one line,
+            // which simply inherit the line's correction.
+            const run = lastRun && Math.abs(lastRun.mid - firstMid) <= LINE_TOL
+                ? lastRun
+                : null;
+            const x = run ? domLeft + (run.paintedRight - run.domRight) : domLeft;
+            lastRun = { mid: firstMid, domRight, paintedRight: x + paintedWidth };
+            return [new view.DOMRect(x, first.top, paintedWidth, first.height)];
+        };
     }
 
     async function writeExportDocument(iframe, html) {
@@ -2430,6 +2501,12 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
     const PAGE_PAD = { top: 68, right: 61, bottom: 68, left: 61 };   // 18mm / 16mm
     const PAGE_INNER_W = A4_W - PAGE_PAD.left - PAGE_PAD.right;
     const PAGE_INNER_H = A4_H - PAGE_PAD.top - PAGE_PAD.bottom;
+    // The single Image export shares the paginated exports' layout: an A4-wide
+    // box with A4 margins, so its measure is PAGE_INNER_W and its line breaks
+    // match PDF (A4) and Images (A4). html2canvas's scale:2 turns the 794px box
+    // into a 1588px-wide PNG — A4 at ~192dpi, and narrow enough to stay
+    // readable on a phone or tablet instead of being a 2480px-wide strip.
+    const IMAGE_EXPORT_W = A4_W;
 
     const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
     const ORPHAN_LINES = 2, WIDOW_LINES = 2;
@@ -2980,6 +3057,7 @@ ${EXPORT_TABLE_CSS}
             for (let i = 0; i < pages.length; i++) {
                 const canvas = await html2canvas(pages[i], {
                     scale: 2, useCORS: true, backgroundColor: bodyBg, logging: false,
+                    onclone: alignTextToCanvasAdvances,
                 });
                 const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
                 files[`${baseName}-${String(i + 1).padStart(2, '0')}.png`] = [new Uint8Array(await blob.arrayBuffer()), { level: 6 }];
@@ -3014,7 +3092,7 @@ ${EXPORT_TABLE_CSS}
             const snapshot = await captureExportSnapshot();
             const css = await fetchPrintCSS(snapshot.dark);
             iframe = document.createElement('iframe');
-            iframe.style.cssText = `position:fixed;left:-20000px;top:0;width:${snapshot.previewWidth}px;height:1123px;border:0;opacity:0;pointer-events:none;`;
+            iframe.style.cssText = `position:fixed;left:-20000px;top:0;width:${snapshot.imageWidth}px;height:1123px;border:0;opacity:0;pointer-events:none;`;
             document.body.appendChild(iframe);
             const doc = await writeExportDocument(iframe, `<!DOCTYPE html>
 <html data-theme="${snapshot.appDark ? 'dark' : 'light'}">
@@ -3029,8 +3107,10 @@ ${snapshot.fontStylesheetURLs.map(url => `<link rel="stylesheet" href="${url}">`
 html, body { height: auto; overflow: visible; margin: 0; color: ${snapshot.fg}; background: ${snapshot.bg} !important; transition: none; }
 .preview-container { overflow: visible; transition: none; background: ${snapshot.bg} !important; }
 .preview-container .markdown-body {
-  box-sizing: border-box; width: ${snapshot.previewWidth}px; max-width: none; margin: 0;
-  min-height: ${snapshot.previewMinHeight}px; height: auto; background-color: ${snapshot.bg} !important;
+/* Height comes from the content alone. A min-height copied from the live preview would make the PNG's height - and therefore its aspect ratio - follow the window size. */
+  box-sizing: border-box; width: ${snapshot.imageWidth}px; max-width: none; margin: 0;
+  padding: ${PAGE_PAD.top}px ${PAGE_PAD.right}px ${PAGE_PAD.bottom}px ${PAGE_PAD.left}px;
+  min-height: 0; height: auto; background-color: ${snapshot.bg} !important;
 }
 .code-block-header { display: none !important; }
 ${EXPORT_TABLE_CSS}
@@ -3042,6 +3122,7 @@ ${EXPORT_TABLE_CSS}
             fitExportTables(article);
             const canvas = await html2canvas(article, {
                 scale: 2, useCORS: true, backgroundColor: snapshot.bg, logging: false,
+                onclone: alignTextToCanvasAdvances,
             });
             const link = document.createElement('a');
             link.download = snapshot.baseName + '.png';
