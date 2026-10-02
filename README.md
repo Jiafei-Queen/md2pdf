@@ -27,6 +27,12 @@
 - **AI Skill** — Installable [Claude Skill](https://md2pdf.studio/ai-skill) + public [REST API](https://md2pdf.studio/api) + WebMCP
 - **AI Discoverable** — `llms.txt`, `robots.txt`, JSON-LD, Open Graph, `ai-plugin.json`
 
+### Export behavior
+
+- PDF, HTML, and PNG exports flush pending edits and wait for Mermaid rendering before capturing a consistent document snapshot. Changes made after capture affect the next export.
+- PDF and PNG tables wrap cell contents first. Tables that still exceed the available width shrink together, including text and spacing, to preserve every column. Extremely wide tables may have small text; layouts that cannot fit report an export error instead of producing a clipped file.
+- The live preview and standalone HTML keep horizontally scrollable tables. Single-image export renders an isolated copy without changing preview scrolling or code-copy controls.
+
 ## Tech Stack
 
 - Pure **HTML**, **CSS**, **JavaScript** — no framework, no build step

@@ -56,6 +56,9 @@
     let currentStyle    = 'github';
     let currentLang     = 'en';
     let renderTimer     = null;
+    let renderGeneration = 0;
+    let renderPromise   = Promise.resolve();
+    let renderError     = null;
     let saveTimer       = null;
     // Derived from the active doc — the single source of truth is docs[].shared
     let isSharedView    = false;
@@ -1435,24 +1438,35 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
     }
 
     function render() {
-        const src = editor.value.trim();
-        if (!src) {
-            preview.innerHTML = '<div class="preview-empty"><p>Start typing to see the preview...</p></div>';
-        } else {
-            // Replace [TOC] / [TOC title="..."] with a placeholder before marked parses it
-            const processed = src.replace(/^\[toc(?:\s+title="([^"]*)")?\]$/gim, function (_, title) {
-                return title ? TOC_PLACEHOLDER + ':' + title : TOC_PLACEHOLDER;
-            });
-            preview.innerHTML = marked.parse(processed);
-            injectTOC();
-            preview.querySelectorAll('pre code').forEach(block => {
-                if (block.classList.contains('language-mermaid')) return;
-                hljs.highlightElement(block);
-            });
-            renderMermaidBlocks();
-            addCodeCopyButtons();
+        clearTimeout(renderTimer);
+        renderTimer = null;
+        renderGeneration++;
+        renderError = null;
+        renderPromise = Promise.resolve();
+        try {
+            const src = editor.value.trim();
+            if (!src) {
+                preview.innerHTML = '<div class="preview-empty"><p>Start typing to see the preview...</p></div>';
+            } else {
+                // Replace [TOC] / [TOC title="..."] before marked parses it.
+                const processed = src.replace(/^\[toc(?:\s+title="([^"]*)")?\]$/gim, function (_, title) {
+                    return title ? TOC_PLACEHOLDER + ':' + title : TOC_PLACEHOLDER;
+                });
+                preview.innerHTML = marked.parse(processed);
+                injectTOC();
+                preview.querySelectorAll('pre code').forEach(block => {
+                    if (block.classList.contains('language-mermaid')) return;
+                    hljs.highlightElement(block);
+                });
+                renderPromise = renderMermaidBlocks();
+                addCodeCopyButtons();
+            }
+            updateCounter();
+        } catch (err) {
+            renderError = err;
+            throw err;
         }
-        updateCounter();
+        return renderPromise;
     }
 
     function injectTOC() {
@@ -1512,9 +1526,9 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
     };
 
     function renderMermaidBlocks() {
-        if (typeof mermaid === 'undefined') return;
+        if (typeof mermaid === 'undefined') return Promise.resolve();
         const blocks = preview.querySelectorAll('pre code.language-mermaid');
-        if (!blocks.length) return;
+        if (!blocks.length) return Promise.resolve();
 
         var mermaidCfg = MERMAID_THEMES[currentStyle] || MERMAID_THEMES.github;
         var isDark = STYLES[currentStyle]?.dark || getTheme() === 'dark';
@@ -1527,21 +1541,22 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
         const isMermaidDark = mermaidCfg.theme === 'dark';
 
-        blocks.forEach(code => {
+        const tasks = Array.from(blocks).map(code => {
             const pre = code.parentElement;
             // Skip if already inside a wrapper (re-render guard)
-            if (pre.closest('.mermaid-block')) return;
+            if (pre.closest('.mermaid-block')) return Promise.resolve();
             const diagram = code.textContent;
             const id = 'mermaid-' + (++_mermaidId);
             const container = document.createElement('div');
             container.className = 'mermaid-block ' + (isMermaidDark ? 'mermaid-block-dark' : 'mermaid-block-light');
             pre.parentNode.replaceChild(container, pre);
-            mermaid.render(id, diagram).then(function (result) {
+            return Promise.resolve().then(() => mermaid.render(id, diagram)).then(function (result) {
                 container.innerHTML = result.svg;
             }).catch(function () {
                 container.innerHTML = '<pre class="mermaid-error">Invalid Mermaid diagram</pre>';
             });
         });
+        return Promise.all(tasks).then(() => undefined);
     }
 
     function addCodeCopyButtons() {
@@ -1588,7 +1603,10 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
     function scheduleRender() {
         clearTimeout(renderTimer);
-        renderTimer = setTimeout(render, 100);
+        renderTimer = setTimeout(() => {
+            renderTimer = null;
+            render();
+        }, 100);
         syncFromEditor();
         saveDraft();
     }
@@ -1999,6 +2017,113 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         return { style, dark, appDark, bg, fg: dark ? '#e6edf3' : '#1f2328' };
     }
 
+    async function captureExportSnapshot() {
+        for (;;) {
+            if (renderTimer !== null) render();
+            const generation = renderGeneration;
+            const promise = renderPromise;
+            await promise;
+            if (renderTimer !== null || generation !== renderGeneration || promise !== renderPromise) continue;
+            if (renderError !== null) throw renderError;
+
+            const appStylesheet = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+                .find(link => new URL(link.href).pathname === '/style.css');
+            if (!appStylesheet) throw new Error('Export stylesheet is unavailable.');
+            const bounds = preview.getBoundingClientRect();
+            const { dark, appDark, bg, fg } = resolveExportTheme();
+            return {
+                content: preview.innerHTML,
+                baseName: currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, ''),
+                styleCSS: getStyleCSSForPrint(),
+                previewStyleCSS: styleOverride.textContent,
+                userCSS: customCSSInput.value || '',
+                dark, appDark, bg, fg,
+                previewWidth: bounds.width > 0 ? bounds.width : 960,
+                previewMinHeight: bounds.height > 0 ? bounds.height : 0,
+                appStylesheetURL: appStylesheet.href,
+                fontStylesheetURLs: Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+                    .filter(link => link.href.startsWith('https://fonts.googleapis.com/'))
+                    .map(link => link.href),
+            };
+        }
+    }
+
+    const EXPORT_TABLE_CSS = `
+.markdown-body table {
+  display: table !important;
+  width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+  table-layout: fixed !important; overflow: visible !important;
+}
+.markdown-body th, .markdown-body td {
+  min-width: 0 !important; overflow-wrap: anywhere !important;
+  word-break: break-word !important; white-space: normal !important;
+}`;
+
+    function fitExportTables(root) {
+        const view = root.ownerDocument.defaultView;
+        for (const table of root.querySelectorAll('table')) {
+            if (!table.querySelector('th, td')) continue;
+            const parent = table.parentElement;
+            const parentStyle = view.getComputedStyle(parent);
+            const availableWidth = parent.clientWidth - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight);
+            if (!Number.isFinite(availableWidth) || availableWidth <= 0) {
+                throw new Error('Cannot measure export table width.');
+            }
+            let requiredWidth = Math.max(table.getBoundingClientRect().width, table.scrollWidth);
+            if (requiredWidth <= availableWidth + 1) continue;
+
+            // Freeze computed pixel sizes before changing inherited font sizes.
+            const properties = ['font-size', 'line-height', 'letter-spacing',
+                'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+                'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width'];
+            const originals = [table, ...table.querySelectorAll('*')].map(element => {
+                const computed = view.getComputedStyle(element);
+                const sizes = [];
+                for (const property of properties) {
+                    const value = computed.getPropertyValue(property);
+                    if (value.endsWith('px') && Number.isFinite(parseFloat(value))) {
+                        sizes.push([property, parseFloat(value)]);
+                    }
+                }
+                return { element, sizes };
+            });
+            const spacing = view.getComputedStyle(table).borderSpacing.split(/\s+/).map(parseFloat);
+            let scale = 1;
+            for (let round = 0; round < 24 && requiredWidth > availableWidth + 1; round++) {
+                scale *= Math.min(0.95, availableWidth / requiredWidth);
+                if (!Number.isFinite(scale) || scale <= 0) break;
+                for (const { element, sizes } of originals) {
+                    for (const [property, value] of sizes) {
+                        element.style.setProperty(property, `${value * scale}px`, 'important');
+                    }
+                }
+                table.style.setProperty('border-spacing', spacing.map(value => `${value * scale}px`).join(' '), 'important');
+                requiredWidth = Math.max(table.getBoundingClientRect().width, table.scrollWidth);
+            }
+            if (!Number.isFinite(scale) || scale <= 0 || requiredWidth > availableWidth + 1) {
+                throw new Error('Table is too wide to export without clipping.');
+            }
+        }
+    }
+
+    async function writeExportDocument(iframe, html) {
+        const doc = iframe.contentDocument;
+        await new Promise((resolve, reject) => {
+            const loaded = () => resolve();
+            iframe.addEventListener('load', loaded, { once: true });
+            try {
+                doc.open();
+                doc.write(html);
+                doc.close();
+            } catch (err) {
+                iframe.removeEventListener('load', loaded);
+                reject(err);
+            }
+        });
+        if (doc.fonts) await doc.fonts.ready;
+        return doc;
+    }
+
     // Set the export overlay's message for the format being produced.
     function setExportStatus(key) {
         const p = document.querySelector('.export-modal p');
@@ -2012,12 +2137,11 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         setExportStatus('generatingPdf');
         exportOverlay.classList.add('active');
 
+        let iframe = null;
         try {
-            const { style, dark, bg: bodyBg, fg: bodyFg, appDark } = resolveExportTheme();
-            const css      = await fetchPrintCSS(dark);
-            const styleCSS = getStyleCSSForPrint();
-            const userCSS  = customCSSInput.value || '';
-            const content  = preview.innerHTML;
+            const snapshot = await captureExportSnapshot();
+            const { dark, bg: bodyBg, fg: bodyFg, appDark, styleCSS, userCSS, content } = snapshot;
+            const css = await fetchPrintCSS(dark);
 
             // Margins always live on <body>, never on @page. A background only
             // paints inside the content box, so @page margins leave the margin
@@ -2043,13 +2167,11 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 .markdown-body tfoot { display: table-footer-group; }
 ` : '';
 
-            const iframe = document.createElement('iframe');
+            iframe = document.createElement('iframe');
             iframe.style.cssText = 'position:fixed;inset:0;width:210mm;height:0;border:none;opacity:0;pointer-events:none;';
             document.body.appendChild(iframe);
 
-            const doc = iframe.contentDocument;
-            doc.open();
-            doc.write(`<!DOCTYPE html>
+            const doc = await writeExportDocument(iframe, `<!DOCTYPE html>
 <html data-theme="${appDark ? 'dark' : 'light'}">
 <head>
 <meta charset="UTF-8">
@@ -2094,26 +2216,18 @@ ${pageBreakCSS}.markdown-body pre { white-space: pre-wrap; word-wrap: break-word
   font-size: 0.9em;
 }
 .markdown-body img { max-width: 100%; }
-.markdown-body table {
-  width: 100%; max-width: 100%;
-  table-layout: fixed; font-size: 13px;
-}
-.markdown-body th, .markdown-body td {
-  overflow-wrap: break-word; word-break: break-word;
-}
+.markdown-body table { font-size: 13px; }
 .code-block-header { display: none; }
 .code-block-wrapper { border: none; overflow: visible; margin: 16px 0; }
 .code-block-wrapper pre { border-radius: 6px !important; }
+${EXPORT_TABLE_CSS}
 </style>
 </head>
 <body>
 <article class="markdown-body">${content}</article>
 </body>
 </html>`);
-            doc.close();
-
-            await new Promise(resolve => { iframe.onload = resolve; setTimeout(resolve, 1500); });
-            await new Promise(r => setTimeout(r, 300));
+            fitExportTables(doc.querySelector('article.markdown-body'));
 
             if (!paginated) {
                 // Measure and set continuous page height
@@ -2124,9 +2238,6 @@ ${pageBreakCSS}.markdown-body pre { white-space: pre-wrap; word-wrap: break-word
                 await new Promise(r => setTimeout(r, 100));
             }
 
-            exportOverlay.classList.remove('active');
-            exportBtn.classList.remove('loading');
-            if (btnLabel) btnLabel.textContent = 'Export';
 
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
@@ -2137,22 +2248,21 @@ ${pageBreakCSS}.markdown-body pre { white-space: pre-wrap; word-wrap: break-word
 
         } catch (err) {
             console.error('Export failed', err);
+            if (iframe) iframe.remove();
+            alert('Export failed.');
+        } finally {
             exportOverlay.classList.remove('active');
             exportBtn.classList.remove('loading');
-            if (btnLabel) btnLabel.textContent = 'Export';
-            alert('Export failed.');
+            if (btnLabel) btnLabel.textContent = t('export');
         }
     }
 
     // ── HTML Export ──────────────────────────────────
 
     async function exportHTML() {
-        const { style, dark, bg: bodyBg, fg: bodyFg, appDark } = resolveExportTheme();
-        const css      = await fetchPrintCSS(dark);
-        const styleCSS = getStyleCSSForPrint();
-        const userCSS  = customCSSInput.value || '';
-        const content  = preview.innerHTML;
-        const title    = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '');
+        const snapshot = await captureExportSnapshot();
+        const { dark, bg: bodyBg, fg: bodyFg, appDark, styleCSS, userCSS, content, baseName: title } = snapshot;
+        const css = await fetchPrintCSS(dark);
 
         const html = `<!DOCTYPE html>
 <html lang="en" data-theme="${appDark ? 'dark' : 'light'}">
@@ -2804,19 +2914,15 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
 
         let iframe = null;
         try {
-            const { dark, bg: bodyBg, fg: bodyFg, appDark } = resolveExportTheme();
-            const css   = await fetchPrintCSS(dark);
-            const styleCSS = getStyleCSSForPrint();
-            const userCSS  = customCSSInput.value || '';
-            const content  = preview.innerHTML;
+            const snapshot = await captureExportSnapshot();
+            const { dark, bg: bodyBg, fg: bodyFg, appDark, styleCSS, userCSS, content } = snapshot;
+            const css = await fetchPrintCSS(dark);
 
             iframe = document.createElement('iframe');
             iframe.style.cssText = 'position:fixed;left:-20000px;top:0;width:' + A4_W + 'px;height:' + A4_H + 'px;border:0;opacity:0;pointer-events:none;';
             document.body.appendChild(iframe);
 
-            const doc = iframe.contentDocument;
-            doc.open();
-            doc.write(`<!DOCTYPE html>
+            const doc = await writeExportDocument(iframe, `<!DOCTYPE html>
 <html data-theme="${appDark ? 'dark' : 'light'}">
 <head>
 <meta charset="UTF-8">
@@ -2848,6 +2954,7 @@ body { width: ${PAGE_INNER_W}px; }
   font-size: 0.9em;
 }
 .markdown-body img { max-width: 100%; height: auto; }
+${EXPORT_TABLE_CSS}
 </style>
 </head>
 <body>
@@ -2855,13 +2962,11 @@ body { width: ${PAGE_INNER_W}px; }
 <div id="stage"></div>
 </body>
 </html>`);
-            doc.close();
-            await new Promise(resolve => { iframe.onload = resolve; setTimeout(resolve, 1500); });
-            await new Promise(r => setTimeout(r, 400));
 
             const stage = doc.getElementById('stage');
             const article = doc.getElementById('md-src');
             stage.style.cssText = `width:${PAGE_INNER_W}px;margin:0;`;
+            fitExportTables(article);
 
             const atoms = buildAtoms(article, stage);
             // The source article has served its purpose; the pages carry the
@@ -2870,7 +2975,7 @@ body { width: ${PAGE_INNER_W}px; }
             const pages = paginateIntoPages(atoms, stage, bodyBg);
 
             // Rasterise each page.
-            const baseName = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '');
+            const baseName = snapshot.baseName;
             const files = {};
             for (let i = 0; i < pages.length; i++) {
                 const canvas = await html2canvas(pages[i], {
@@ -2903,21 +3008,42 @@ body { width: ${PAGE_INNER_W}px; }
 
     async function exportImage() {
         exportOverlay.classList.add('active');
-
+        let iframe = null;
         try {
-            const style = STYLES[currentStyle] || STYLES.notion;
-            // Hide copy headers for clean screenshot
-            preview.querySelectorAll('.code-block-header').forEach(h => h.style.display = 'none');
-            const canvas = await html2canvas(preview, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: style.bg,
-                logging: false,
+            const snapshot = await captureExportSnapshot();
+            const css = await fetchPrintCSS(snapshot.dark);
+            iframe = document.createElement('iframe');
+            iframe.style.cssText = `position:fixed;left:-20000px;top:0;width:${snapshot.previewWidth}px;height:1123px;border:0;opacity:0;pointer-events:none;`;
+            document.body.appendChild(iframe);
+            const doc = await writeExportDocument(iframe, `<!DOCTYPE html>
+<html data-theme="${snapshot.appDark ? 'dark' : 'light'}">
+<head>
+<meta charset="UTF-8">
+${snapshot.fontStylesheetURLs.map(url => `<link rel="stylesheet" href="${url}">`).join('\n')}
+<style>${css}</style>
+<link rel="stylesheet" href="${snapshot.appStylesheetURL}">
+<style>${snapshot.previewStyleCSS}</style>
+<style>${snapshot.userCSS}</style>
+<style>
+html, body { height: auto; overflow: visible; margin: 0; color: ${snapshot.fg}; background: ${snapshot.bg} !important; transition: none; }
+.preview-container { overflow: visible; transition: none; background: ${snapshot.bg} !important; }
+.preview-container .markdown-body {
+  box-sizing: border-box; width: ${snapshot.previewWidth}px; max-width: none; margin: 0;
+  min-height: ${snapshot.previewMinHeight}px; height: auto; background-color: ${snapshot.bg} !important;
+}
+.code-block-header { display: none !important; }
+${EXPORT_TABLE_CSS}
+</style>
+</head>
+<body><div class="preview-container"><article class="markdown-body" id="md-image">${snapshot.content}</article></div></body>
+</html>`);
+            const article = doc.getElementById('md-image');
+            fitExportTables(article);
+            const canvas = await html2canvas(article, {
+                scale: 2, useCORS: true, backgroundColor: snapshot.bg, logging: false,
             });
-            preview.querySelectorAll('.code-block-header').forEach(h => h.style.display = '');
-
             const link = document.createElement('a');
-            link.download = currentFileName.replace(/\.(md|markdown|txt|mdx)$/i, '') + '.png';
+            link.download = snapshot.baseName + '.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
             showToast(t('imgDownloaded'));
@@ -2925,6 +3051,7 @@ body { width: ${PAGE_INNER_W}px; }
             console.error('Image export failed', err);
             alert('Image export failed.');
         } finally {
+            if (iframe) iframe.remove();
             exportOverlay.classList.remove('active');
         }
     }
@@ -3401,7 +3528,10 @@ body { width: ${PAGE_INNER_W}px; }
         // Export
         exportPDFBtn.addEventListener('click',  () => { exportDropdown.classList.remove('open'); exportPDF(false); });
         exportPDFPagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportPDF(true); });
-        exportHTMLBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportHTML(); });
+        exportHTMLBtn.addEventListener('click', () => {
+            exportDropdown.classList.remove('open');
+            exportHTML().catch(err => { console.error('Export failed', err); alert('Export failed.'); });
+        });
         exportMarkdownBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportMarkdown(); });
         exportImageBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImage(); });
         exportImagePagesBtn.addEventListener('click', () => { exportDropdown.classList.remove('open'); exportImagePages(); });
@@ -3574,7 +3704,7 @@ body { width: ${PAGE_INNER_W}px; }
                 const format = new FormData(wmcpExport).get('format');
                 if (format === 'pdf')       exportPDF(false);
                 if (format === 'pdf-pages') exportPDF(true);
-                if (format === 'html')      exportHTML();
+                if (format === 'html')      exportHTML().catch(err => { console.error('Export failed', err); alert('Export failed.'); });
                 if (format === 'markdown')  exportMarkdown();
                 if (format === 'image')     exportImage();
                 if (format === 'image-pages') exportImagePages();
