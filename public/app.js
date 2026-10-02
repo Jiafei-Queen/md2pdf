@@ -89,7 +89,7 @@
             copy: 'Copy', copied: 'Copied!',
             download: 'Download',
             tabSkill: 'Skill', tabApi: 'API',
-            generatingPdf: 'Generating PDF...',
+            generatingPdf: 'Generating PDF...', generatingImage: 'Generating Image...',
             exportImagePages: 'Images (A4)', imgPaging: 'Generating page images...', imgZipped: 'Downloaded {n} page images',
             generatingHtml: 'Generating HTML...', sharing: 'Creating link...',
             dropHere: 'Drop your <strong>.md</strong> file here',
@@ -142,7 +142,7 @@
             copy: 'Copiar', copied: 'Copiado!',
             download: 'Descargar',
             tabSkill: 'Skill', tabApi: 'API',
-            generatingPdf: 'Generando PDF...',
+            generatingPdf: 'Generando PDF...', generatingImage: 'Generando imagen...',
             exportImagePages: 'Imágenes (páginas A4)', imgPaging: 'Generando imágenes...', imgZipped: '{n} imágenes descargadas',
             generatingHtml: 'Generando HTML...', sharing: 'Creando enlace...',
             dropHere: 'Suelta tu archivo <strong>.md</strong> aqui',
@@ -3007,6 +3007,7 @@ ${EXPORT_TABLE_CSS}
     // ── Export Image ─────────────────────────────────
 
     async function exportImage() {
+        setExportStatus('generatingImage');
         exportOverlay.classList.add('active');
         let iframe = null;
         try {
