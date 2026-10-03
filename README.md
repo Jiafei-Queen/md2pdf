@@ -21,7 +21,9 @@
 - **Export** — PDF (continuous single page, or paginated A4), HTML (standalone with inline styles), Markdown (raw `.md` source), PNG (single image, or A4 pages as a ZIP)
 - **Custom CSS** — Inject your own styles
 - **Share by URL** — AES-256-GCM encrypted short links
-- **Mermaid diagrams** — Flowcharts, sequence, Gantt, pie
+- **Mermaid diagrams** — Flowcharts, sequence, Gantt, pie; follow the light/dark theme
+- **LaTeX math** — `$...$` / `$$...$$` rendered with KaTeX
+- **Footnotes** — GFM `[^1]` references with a footnotes section and back-links
 - **Auto table of contents**, **syntax highlighting** (180+ languages)
 - **Dark & Light Mode**, **Drag & Drop**, **Find & Replace**, **Scroll Sync**, **Fullscreen**, **Word Count**, **Auto-Save**
 - **AI Skill** — Installable [Claude Skill](https://md2pdf.studio/ai-skill) + public [REST API](https://md2pdf.studio/api) + WebMCP

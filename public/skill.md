@@ -103,6 +103,8 @@ This is my first document."
 
 - Full GitHub-Flavored Markdown (GFM): headings, tables, task lists, blockquotes, images, links
 - **Mermaid diagrams**: use ` ```mermaid ` code blocks for flowcharts, sequence diagrams, Gantt charts, etc.
+- **LaTeX math**: inline `$...$` and block `$$...$$` formulas rendered with KaTeX
+- **Footnotes**: `[^1]` references with a `[^1]: ...` definition render as superscript links plus a footnotes section
 - **Table of contents**: write `[TOC]` on its own line to auto-generate a linked TOC
 - Syntax highlighting for 180+ programming languages
 

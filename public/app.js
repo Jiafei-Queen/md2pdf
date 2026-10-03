@@ -1343,12 +1343,24 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
             marked.use({ renderer: renderer });
         } catch (_) {}
 
-        // Mermaid init (non-blocking — app works without it)
+        // GFM footnotes (non-blocking — app works without it)
+        try {
+            if (typeof markedFootnote === 'function') marked.use(markedFootnote({ headingClass: '' }));
+        } catch (_) {}
+
+        // LaTeX math via KaTeX (non-blocking). Strict delimiters: closing $
+        // must be followed by space/punctuation/EOL, so "$100 and $200" stays
+        // literal text.
+        try {
+            if (typeof markedKatex === 'function') marked.use(markedKatex({ throwOnError: false, nonStandard: false }));
+        } catch (_) {}
+
+        // Mermaid init (non-blocking — app works without it). Theme is decided
+        // per render by mermaidThemeFor().
         try {
             if (typeof mermaid !== 'undefined') {
                 mermaid.initialize({
                     startOnLoad: false,
-                    theme: getTheme() === 'dark' ? 'dark' : 'default',
                     securityLevel: 'loose',
                 });
             }
@@ -1473,8 +1485,10 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         const html = preview.innerHTML;
         if (!html.includes(TOC_PLACEHOLDER)) return;
 
-        // H2–H6 only — H1 is the document title, not a section
-        const headings = preview.querySelectorAll('h2, h3, h4, h5, h6');
+        // H2–H6 only — H1 is the document title, not a section. The footnote
+        // block's own <h2> is not a document section either.
+        const headings = Array.from(preview.querySelectorAll('h2, h3, h4, h5, h6'))
+            .filter(h => !h.closest('section[data-footnotes]'));
 
         // Match placeholder with optional title: «TOC_PLACEHOLDER»:My Title or just «TOC_PLACEHOLDER»
         const tocRegex = new RegExp('<p>' + TOC_PLACEHOLDER + '(?::([^<]*))?</p>|' + TOC_PLACEHOLDER + '(?::([^<]*))?', 'g');
@@ -1496,18 +1510,63 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
             toc += '</ul></nav>';
             return toc;
         });
+    }
 
-        // Intercept TOC clicks — scroll inside the preview container, not the page
-        preview.querySelectorAll('.md-toc a').forEach(a => {
-            a.addEventListener('click', function (e) {
-                e.preventDefault();
-                const id = this.getAttribute('href').slice(1);
-                const target = document.getElementById(id);
-                if (target) {
-                    previewContainer.scrollTo({ top: target.offsetTop - previewContainer.offsetTop, behavior: 'smooth' });
-                }
-            });
+    // href/hash → element inside #preview, or null. Preview-scoped lookup:
+    // document.getElementById could collide with app ids (a heading slugged
+    // to "editor" would return the textarea).
+    function resolvePreviewAnchor(href) {
+        let id = href.charAt(0) === '#' ? href.slice(1) : href;
+        if (!id) return null;
+        try { id = decodeURIComponent(id); } catch (_) {}
+        try { return preview.querySelector('#' + CSS.escape(id)); } catch (_) { return null; }
+    }
+
+    function scrollToInPreview(target, smooth) {
+        const top = previewContainer.scrollTop
+            + target.getBoundingClientRect().top
+            - previewContainer.getBoundingClientRect().top;
+        previewContainer.scrollTo({ top: top, behavior: smooth ? 'smooth' : 'auto' });
+    }
+
+    function initAnchorNavigation() {
+        // One delegated listener survives preview.innerHTML rewrites.
+        // preventDefault stops native fragment navigation: it would scroll
+        // `body` (overflow:hidden only blocks user input) and clobber a
+        // share key in `#k=`.
+        preview.addEventListener('click', function (e) {
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return; // new-tab opens; load guard below repairs it
+            const a = e.target.closest('a[href^="#"]');
+            if (!a) return;
+            e.preventDefault();
+            const target = resolvePreviewAnchor(a.getAttribute('href'));
+            if (target) scrollToInPreview(target, true);
         });
+
+        // Load with an in-preview anchor (#footnote-1): native fragment scroll
+        // already ran (or will run) against `body` — repair it, strip the
+        // fragment so future navigations are inert, and scroll the preview.
+        function fixupFragmentHash() {
+            const raw = location.hash;
+            if (!raw || raw === '#') return;
+            if (/^#(k|doc)=/.test(raw)) return;          // share/legacy key — consumed by loadFromURL, never touch
+            const target = resolvePreviewAnchor(raw);
+            if (!target) return;                          // foreign/unknown hash: leave URL alone
+            history.replaceState(null, '', location.pathname + location.search);
+            clampBodyScroll();
+            scrollToInPreview(target, false);
+        }
+
+        function clampBodyScroll() {
+            if (document.body.scrollTop) document.body.scrollTop = 0;
+            if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0;
+        }
+
+        fixupFragmentHash();                              // init runs after render(), target exists now
+        window.addEventListener('load', fixupFragmentHash); // covers native scroll racing an async init (loadFromURL await)
+        window.addEventListener('hashchange', fixupFragmentHash); // manual hash edit / back-forward to a pre-fix entry
+        document.body.addEventListener('scroll', clampBodyScroll);
+        window.addEventListener('scroll', clampBodyScroll); // documentElement is the scroller in some browsers
     }
 
     // Per-style mermaid theme variables
@@ -1525,21 +1584,41 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         pastel:     { theme: 'default', themeVariables: { primaryColor: '#f0d4f8', primaryTextColor: '#5a3878', lineColor: '#b8a9e8', secondaryColor: '#fce4ec', tertiaryColor: '#e0f4f0' } },
     };
 
+    // Mermaid theming: per-style palettes for light rendering; mermaid's
+    // built-in dark theme whenever the preview is dark (app dark mode or a
+    // dark-by-definition style). A style's font carries over into dark mode,
+    // its light colors must not.
+    function mermaidThemeFor(styleKey, dark) {
+        const cfg = MERMAID_THEMES[styleKey] || MERMAID_THEMES.github;
+        if (cfg.theme === 'dark') return { theme: 'dark', themeVariables: cfg.themeVariables || {} };
+        if (!dark) return { theme: 'default', themeVariables: cfg.themeVariables || {} };
+        const vars = {};
+        if (cfg.themeVariables && cfg.themeVariables.fontFamily) {
+            vars.fontFamily = cfg.themeVariables.fontFamily;
+        }
+        return { theme: 'dark', themeVariables: vars };
+    }
+
+    // Single predicate for "the preview paints dark" — shared with export theme
+    // resolution so preview and exported documents never disagree.
+    function previewDark() {
+        return STYLES[currentStyle]?.dark === true || getTheme() === 'dark';
+    }
+
     function renderMermaidBlocks() {
         if (typeof mermaid === 'undefined') return Promise.resolve();
         const blocks = preview.querySelectorAll('pre code.language-mermaid');
         if (!blocks.length) return Promise.resolve();
 
-        var mermaidCfg = MERMAID_THEMES[currentStyle] || MERMAID_THEMES.github;
-        var isDark = STYLES[currentStyle]?.dark || getTheme() === 'dark';
+        const mt = mermaidThemeFor(currentStyle, previewDark());
         mermaid.initialize({
             startOnLoad: false,
-            theme: mermaidCfg.theme || (isDark ? 'dark' : 'default'),
-            themeVariables: mermaidCfg.themeVariables || {},
+            theme: mt.theme,
+            themeVariables: mt.themeVariables,
             securityLevel: 'loose',
         });
 
-        const isMermaidDark = mermaidCfg.theme === 'dark';
+        const isMermaidDark = mt.theme === 'dark';
 
         const tasks = Array.from(blocks).map(code => {
             const pre = code.parentElement;
@@ -1638,14 +1717,6 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         $('#md-css-light').disabled   = forceDark ? true  : t !== 'light';
         $('#hljs-css-dark').disabled  = forceDark ? false : t !== 'dark';
         $('#hljs-css-light').disabled = forceDark ? true  : t !== 'light';
-
-        // Update mermaid theme
-        try {
-            if (typeof mermaid !== 'undefined') {
-                const forceDarkMermaid = forceDark || t === 'dark';
-                mermaid.initialize({ startOnLoad: false, theme: forceDarkMermaid ? 'dark' : 'default', securityLevel: 'loose' });
-            }
-        } catch (_) {}
 
         // Force repaint on editor and preview to pick up new CSS variables
         const bg = forceDark ? STYLES[currentStyle].bg : (t === 'dark' ? '#0d1117' : '#ffffff');
@@ -2007,7 +2078,7 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
     function resolveExportTheme() {
         const style = STYLES[currentStyle] || STYLES.notion;
         const appDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const dark = appDark || style.dark === true;
+        const dark = previewDark();
         // Prefer the preview's real painted background over the style's static
         // value: it already accounts for the theme toggle.
         const previewBg = getComputedStyle(preview).backgroundColor;
@@ -2056,6 +2127,19 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
   min-width: 0 !important; overflow-wrap: anywhere !important;
   word-break: break-word !important; white-space: normal !important;
 }`;
+
+    // Styles that live in /style.css but must also reach the export documents,
+    // which do not link it (only the image export does).
+    const EXPORT_BASE_CSS = `
+.mermaid-block { margin: 16px 0; text-align: center; overflow-x: auto; padding: 16px; border-radius: 8px; }
+.mermaid-block-light { background: #ffffff; }
+.mermaid-block-dark { background: #1a1a1a; }
+.mermaid-block svg { max-width: 100%; height: auto; }
+.mermaid-error { color: #ef4444; font-size: 0.85em; padding: 12px; border: 1px dashed #888; border-radius: 8px; }
+.markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; break-inside: avoid; page-break-inside: avoid; }
+`;
+
+    const KATEX_CSS_URL = 'https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css';
 
     function fitExportTables(root) {
         const view = root.ownerDocument.defaultView;
@@ -2157,6 +2241,9 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
             const host = this.startContainer.parentElement;
             if (!host) return rects;
+            // KaTeX positions glyphs through nested spans; rewriting each text
+            // run's box from canvas measurements distorts math spacing.
+            if (host.closest('.katex')) return rects;
             const style = view.getComputedStyle(host);
             meter.font = [style.fontStyle, style.fontVariant, style.fontWeight,
                 style.fontSize, style.fontFamily].join(' ');
@@ -2247,8 +2334,10 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 <head>
 <meta charset="UTF-8">
 <title> </title>
+<link rel="stylesheet" href="${KATEX_CSS_URL}">
 <style>${css}</style>
 <style>${styleCSS}</style>
+<style>${EXPORT_BASE_CSS}</style>
 <style>${userCSS}</style>
 <style>
 ${pageRule}
@@ -2341,8 +2430,10 @@ ${EXPORT_TABLE_CSS}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
+<link rel="stylesheet" href="${KATEX_CSS_URL}">
 <style>${css}</style>
 <style>${styleCSS}</style>
+<style>${EXPORT_BASE_CSS}</style>
 <style>${userCSS}</style>
 <style>
 body {
@@ -3004,8 +3095,10 @@ document.querySelectorAll('.code-copy-btn').forEach(function(btn){
 <head>
 <meta charset="UTF-8">
 <title> </title>
+<link rel="stylesheet" href="${KATEX_CSS_URL}">
 <style>${css}</style>
 <style>${styleCSS}</style>
+<style>${EXPORT_BASE_CSS}</style>
 <style>${userCSS}</style>
 <style>
 html, body { margin: 0; padding: 0; background: ${bodyBg} !important; color: ${bodyFg};
@@ -3099,9 +3192,11 @@ ${EXPORT_TABLE_CSS}
 <head>
 <meta charset="UTF-8">
 ${snapshot.fontStylesheetURLs.map(url => `<link rel="stylesheet" href="${url}">`).join('\n')}
+<link rel="stylesheet" href="${KATEX_CSS_URL}">
 <style>${css}</style>
 <link rel="stylesheet" href="${snapshot.appStylesheetURL}">
 <style>${snapshot.previewStyleCSS}</style>
+<style>${EXPORT_BASE_CSS}</style>
 <style>${snapshot.userCSS}</style>
 <style>
 html, body { height: auto; overflow: visible; margin: 0; color: ${snapshot.fg}; background: ${snapshot.bg} !important; transition: none; }
@@ -3922,6 +4017,7 @@ ${EXPORT_TABLE_CSS}
         initShortcuts();
         initDropdowns();
         initEvents();
+        initAnchorNavigation();
         initWebMCP();
         fetchGitHubStars();
     }

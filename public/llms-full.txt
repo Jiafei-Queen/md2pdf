@@ -5,7 +5,7 @@
 Website: https://md2pdf.studio
 GitHub: https://github.com/Jiafei-Queen/md2pdf
 Upstream: https://github.com/JSiapoDEV/md2pdf
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 API version: 1.0 (stable)
 
 ---
@@ -15,7 +15,9 @@ API version: 1.0 (stable)
 - Live split-pane editor with real-time Markdown preview
 - GitHub-Flavored Markdown (GFM) support
 - Syntax highlighting for 180+ programming languages (via highlight.js)
-- **Mermaid diagram rendering** (flowcharts, sequence diagrams, Gantt charts, pie charts, etc.)
+- **Mermaid diagram rendering** (flowcharts, sequence diagrams, Gantt charts, pie charts, etc.) — follows the light/dark theme
+- **LaTeX math rendering** — inline `$...$` and block `$$...$$` formulas via KaTeX
+- **Footnotes** — GFM `[^1]` references with a footnotes section and back-links
 - **Auto table of contents** — write `[TOC]` anywhere to generate a linked TOC from headings
 - 11 visual styles for document rendering
 - Custom CSS injection for full styling control
@@ -243,6 +245,8 @@ MD2PDF supports full GitHub-Flavored Markdown (GFM) plus extensions:
 - Horizontal rules
 - Links (inline and reference)
 - **Mermaid diagrams** — use ` ```mermaid ` code blocks for flowcharts, sequence diagrams, Gantt charts, pie charts, class diagrams, state diagrams, ER diagrams, and more
+- **LaTeX math** — inline `$E=mc^2$` and block `$$...$$` formulas rendered with KaTeX (closing `$` must be followed by space or punctuation)
+- **Footnotes** — `[^1]` reference plus `[^1]: text` definition renders a superscript link and a footnotes section with back-references
 - **Auto table of contents** — write `[TOC]` on its own line to generate a linked table of contents from all headings
 
 ---
