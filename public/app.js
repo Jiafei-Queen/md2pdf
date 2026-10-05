@@ -1380,18 +1380,59 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         return m ? m[0].toUpperCase() : '?';
     }
 
+    // Ids present in the sidebar as of the last render. renderTabs()
+    // wipes and rebuilds the whole list, so a plain CSS entrance on
+    // .doc-tab would replay for every row on every repaint — including
+    // routine ones like renaming a file. Comparing against this set lets
+    // us animate only rows that genuinely appeared (a new doc, a restored
+    // session), which is the only case where an entrance is meaningful.
+    let lastRenderedDocIds = new Set();
+
+    // Which row just became active, and from which side. Drives the
+    // direction-aware settle on switch. Null when nothing switched, so a
+    // first paint (or a rename) does not animate the active row.
+    let pendingTabSwitch = null;
+
     function renderTabs() {
         const list = document.getElementById('docTabs');
         if (!list) return;
+
+        // Capture the outgoing active row's index before the list is
+        // rebuilt, so we can tell an upward switch from a downward one.
+        let prevActiveIndex = -1;
+        if (pendingTabSwitch != null) {
+            const currentIds = Array.from(list.children).map(el => el.dataset.docId);
+            prevActiveIndex = currentIds.indexOf(String(pendingTabSwitch));
+        }
+
+        const known = lastRenderedDocIds;
+        const isFirstPaint = known.size === 0 && list.children.length === 0;
+
         list.innerHTML = '';
         const frag = document.createDocumentFragment();
-        docs.forEach(d => {
+        let activeIndex = -1;
+
+        docs.forEach((d, i) => {
             const tab = document.createElement('div');
-            tab.className = 'doc-tab' + (d.id === activeDocId ? ' active' : '');
+            const isActive = d.id === activeDocId;
+            tab.className = 'doc-tab' + (isActive ? ' active' : '');
             tab.dataset.docId = String(d.id);
             tab.setAttribute('role', 'tab');
-            tab.setAttribute('aria-selected', d.id === activeDocId ? 'true' : 'false');
+            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
             tab.title = d.name;
+
+            // Entrance only for rows that were not in the list a moment
+            // ago, and never on the very first paint (restoring a session
+            // would otherwise cascade a dozen rows into view at once).
+            if (!isFirstPaint && !known.has(String(d.id))) {
+                tab.classList.add('tab-enter');
+            }
+
+            // Direction-aware settle on the row that just became active.
+            if (isActive && pendingTabSwitch != null && prevActiveIndex !== -1 && prevActiveIndex !== i) {
+                tab.classList.add(prevActiveIndex < i ? 'tab-settle-down' : 'tab-settle-up');
+            }
+            if (isActive) activeIndex = i;
 
             const initial = document.createElement('span');
             initial.className = 'doc-tab-initial';
@@ -1414,6 +1455,19 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
             frag.appendChild(tab);
         });
         list.appendChild(frag);
+
+        // Animate the newly active row into view when it sits outside the
+        // visible strip. Scrolling a rebuilt element is a no-op without
+        // this, and without scrolling the "settle" plays off-screen.
+        if (pendingTabSwitch != null && activeIndex !== -1) {
+            const el = list.children[activeIndex];
+            if (el && typeof el.scrollIntoView === 'function') {
+                try { el.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+            }
+        }
+
+        lastRenderedDocIds = new Set(docs.map(d => String(d.id)));
+        pendingTabSwitch = null;
     }
 
     function setSidebarCollapsed(collapsed) {
@@ -1834,26 +1888,80 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
         if (d) d.content = editor.value;
     }
 
+    // ── View mode ────────────────────────────────────
+
+    // Single owner for the split/preview layout switch.
+    //
+    // The CSS collapses the editor pane to zero width (rather than
+    // `display: none`) so the change can be animated, and puts the
+    // transition on `.view-animating` instead of the base state so the
+    // splitter drag stays glued to the cursor. That class therefore has
+    // to be added for the duration of the switch and then removed — and
+    // if it were left on, every later flex change would animate, which
+    // is exactly the drag lag it exists to avoid.
+    //
+    // Timers are tracked so rapid toggling cannot leave the class
+    // stranded or remove it early mid-flight.
+    let viewAnimTimer = null;
+
+    function setViewMode(previewOnly, opts) {
+        const next = !!previewOnly;
+        const animate = !opts || opts.animate !== false;
+
+        // Already in the requested state: still refresh the button UI
+        // (callers rely on that), but do not re-run the transition.
+        const changed = workspace.classList.contains('preview-only') !== next;
+        if (changed && animate) {
+            workspace.classList.add('view-animating');
+            clearTimeout(viewAnimTimer);
+            // Slightly longer than --t-normal (220ms) so the class
+            // outlives the transition rather than cutting it short.
+            viewAnimTimer = setTimeout(() => {
+                workspace.classList.remove('view-animating');
+                viewAnimTimer = null;
+            }, 260);
+        } else if (!animate) {
+            // Explicitly non-animated path (initial render): make sure a
+            // previous timer cannot fire late and yank the class off.
+            clearTimeout(viewAnimTimer);
+            viewAnimTimer = null;
+            workspace.classList.remove('view-animating');
+        }
+
+        workspace.classList.toggle('preview-only', next);
+    }
+
+    function syncViewButtons(previewOnly) {
+        viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+        const target = viewToggle.querySelector(previewOnly ? '[data-view="preview"]' : '[data-view="split"]');
+        if (target) target.classList.add('active');
+    }
+
     // preview-only / shared-locked travel with the doc: the workspace layout is
     // not global state, it belongs to whichever tab is active.
     function applySharedLock(shared) {
         isSharedView = !!shared;
         workspace.classList.toggle('shared-locked', isSharedView);
-        workspace.classList.toggle('preview-only', isSharedView);
+        // Doc switches are not user-initiated view toggles, and they can
+        // fire in bursts during restore, so they switch without animating.
+        setViewMode(isSharedView, { animate: false });
         const lockBtn = document.getElementById('sharedLock');
         if (lockBtn) {
             lockBtn.hidden = !isSharedView;
             if (isSharedView) { lockBtn.title = t('sharedLockTip'); lockBtn.setAttribute('aria-label', t('sharedLockTip')); }
         }
-        viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-        const target = viewToggle.querySelector(isSharedView ? '[data-view="preview"]' : '[data-view="split"]');
-        if (target) target.classList.add('active');
+        syncViewButtons(isSharedView);
     }
 
     function activateDoc(id, opts) {
         const restoreView = !opts || opts.restoreView !== false;
         const d = docs.find(doc => doc.id === id);
         if (!d || d.id === activeDocId) { if (d) renderTabs(); return; }
+
+        // Record that the active row is about to move, so renderTabs() can
+        // play the direction-aware settle on the incoming row. Set before
+        // any of the work below, since several branches call renderTabs().
+        pendingTabSwitch = activeDocId;
 
         captureActive();
         activeDocId = d.id;
@@ -2023,10 +2131,19 @@ Text formatting: **bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [li
 
     // ── Toast ────────────────────────────────────────
 
+    // Tracked so a rapid second toast cancels the first one's pending
+    // hide. Without this, the earlier timer fires and yanks the toast
+    // back down while the new message is still meant to be on screen.
+    let toastHideTimer = null;
+
     function showToast(msg) {
         toastMsg.textContent = msg;
         toastEl.classList.add('show');
-        setTimeout(() => toastEl.classList.remove('show'), 2500);
+        clearTimeout(toastHideTimer);
+        toastHideTimer = setTimeout(() => {
+            toastEl.classList.remove('show');
+            toastHideTimer = null;
+        }, 2500);
     }
 
     // ── PDF Export ───────────────────────────────────
@@ -3417,14 +3534,13 @@ ${EXPORT_TABLE_CSS}
         // The read-only tab stays read-only; the fork is a new editable tab.
         const src = activeDoc();
         const content = src ? src.content : editor.value;
-        workspace.classList.remove('preview-only', 'shared-locked');
+        workspace.classList.remove('shared-locked');
+        setViewMode(false, { animate: false });
         createDocAndActivate({ name: 'copy-of-shared.md', content, dedup: false });
         // Drop the /s/:id URL so F5 no longer re-fetches the original over local edits.
         history.replaceState(null, '', '/');
         // Switch toolbar back to split view.
-        viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-        const splitBtn = viewToggle.querySelector('[data-view="split"]');
-        if (splitBtn) splitBtn.classList.add('active');
+        syncViewButtons(false);
         // Persist so F5 restores the copy instead of the sample.
         saveDraft();
         closeForkModal();
@@ -3826,7 +3942,7 @@ ${EXPORT_TABLE_CSS}
             }
             viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            workspace.classList.toggle('preview-only', mode === 'preview');
+            setViewMode(mode === 'preview');
         });
 
         // Style select

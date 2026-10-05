@@ -202,7 +202,9 @@ body {
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: background var(--t-fast), color var(--t-fast),
+                border-color var(--t-fast), box-shadow var(--t-fast),
+                transform var(--t-fast);
     white-space: nowrap;
     line-height: 1;
     outline: none;
@@ -210,6 +212,27 @@ body {
 
 .btn:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
 .btn:active { transform: scale(0.96); }
+
+/* Press feedback for the icon-sized controls, which previously had
+   hover colour but no tactile acknowledgement on click.
+
+   Two tiers on purpose:
+     - view-btn / api-tab are toggles whose active state carries
+       meaning, so they get the same 0.96 as .btn
+     - the small × and pane controls get a gentler scale — a 26px
+       target shrinking as hard as a 40px button reads as a misclick
+
+   `transform` is listed in each rule's transition below so these
+   animate rather than snapping; without it the scale would still
+   apply, just instantly. */
+.view-btn:active,
+.api-tab:active { transform: scale(0.96); }
+
+.find-btn:active,
+.doc-sidebar-toggle:active,
+.api-copy-btn:active { transform: scale(0.92); }
+
+.doc-tab-close:active { transform: scale(0.88); }
 
 .btn-primary {
     background: var(--btn-primary-bg);
@@ -258,7 +281,8 @@ body {
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: background var(--t-fast), color var(--t-fast),
+                box-shadow var(--t-fast), transform var(--t-fast);
 }
 
 .view-btn:hover { color: var(--text-1); }
@@ -269,12 +293,80 @@ body {
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
-/* Preview-only mode */
+/* Preview-only mode
 
+   The editor pane and the drag handle collapse to zero on their main
+   axis instead of `display: none`, so the switch can be animated.
+
+   Three things this has to get right:
+
+   1. `flex: 1` expands to `flex: 1 1 0%`, so animating flex-basis
+      alone would do nothing — the grow factor is what holds the pane
+      open. Both are transitioned, and the destination is
+      `flex: 0 0 0px` (no growth, no shrink, no base).
+   2. initResize() writes INLINE `style.flex = '0 0 Npx'` on both
+      panes. An inline declaration outranks any class rule, so a
+      plain class-based collapse would be silently defeated after the
+      user has ever dragged the splitter. `!important` is what makes
+      the collapse win regardless of what the drag left behind — the
+      inline value is intentionally left intact so the split ratio
+      is still there when the user switches back.
+   3. Mobile (max-width: 768px) lays the workspace out as a column
+      with a horizontal handle, so the collapse has to follow the
+      main axis in both orientations rather than assuming width.
+      The mobile override below pins it to height.
+
+   The fading pane is a child of `.pane` (overflow: hidden), so its
+   contents clip away with it — the textarea never reflows, and
+   `.markdown-body` inside the preview is untouched by any of this.
+
+   The transition itself lives on `.view-animating` (applied by JS for
+   the length of the switch) rather than on the base state, so the
+   splitter drag in initResize() stays glued to the cursor. A
+   permanent flex transition there would make the editor visibly
+   trail the mouse by ~220ms on every mousemove. */
 .workspace.preview-only .editor-pane,
-.workspace.preview-only .resize-handle { display: none; }
+.workspace.preview-only .resize-handle {
+    flex: 0 0 0px !important;
+    min-width: 0;
+    opacity: 0;
+    pointer-events: none;
+}
 
-.workspace.preview-only .preview-pane { flex: 1; }
+/* The handle is 5px wide with a 1px border on each side, and a flex item
+   cannot shrink below its own border box — collapsing `flex` alone left a
+   2px sliver on screen. Zeroing the side borders lets it reach a true
+   zero width. They are transitioned alongside the width so the sliver
+   does not linger after the pane has gone. */
+.workspace.preview-only .resize-handle {
+    border-left-width: 0;
+    border-right-width: 0;
+}
+
+.workspace.preview-only .preview-pane {
+    flex: 1 1 auto !important;
+}
+
+/* Both directions: entering preview-only and returning to split. */
+.workspace.view-animating .editor-pane {
+    transition: flex-grow var(--t-normal),
+                flex-shrink var(--t-normal),
+                flex-basis var(--t-normal),
+                opacity 120ms var(--ease);
+}
+
+.workspace.view-animating .resize-handle {
+    transition: flex-grow var(--t-normal),
+                flex-shrink var(--t-normal),
+                flex-basis var(--t-normal),
+                border-left-width var(--t-normal),
+                border-right-width var(--t-normal),
+                opacity 120ms var(--ease);
+}
+
+.workspace.view-animating .preview-pane {
+    transition: flex-grow var(--t-normal), flex-basis var(--t-normal);
+}
 
 /* =========================================
    Fullscreen Button
@@ -307,7 +399,13 @@ body {
     background: var(--bg-surface);
     border-right: 1px solid var(--border);
     overflow: hidden;
-    transition: width var(--t-normal);
+    /* `width` covers the collapse animation; background/border-color
+       complete the theme cross-fade that body / .toolbar / .pane-header
+       already do — without them this rail was the one surface that
+       hard-cut on theme switch. */
+    transition: width var(--t-normal),
+                background var(--t-normal),
+                border-color var(--t-normal);
 }
 
 .doc-sidebar.collapsed { width: 44px; }
@@ -336,7 +434,7 @@ body {
     background: none;
     color: var(--text-2);
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
 }
 
 .doc-sidebar-toggle:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
@@ -472,6 +570,31 @@ body {
 
 .doc-tab:hover { color: var(--text-1); background: var(--btn-ghost-hover); }
 .doc-tab.active { color: var(--btn-primary-fg); background: var(--btn-primary-bg); }
+
+/* Tab switch + appearance motion.
+
+   Both animations are applied to freshly built elements by renderTabs(),
+   so they play once per element and cannot loop.
+
+   `tab-enter` and `tab-settle-*` can land on the same row (a brand-new doc
+   that is immediately active), so the settle deliberately animates only
+   transform and the entrance only opacity+height — disjoint properties, so
+   the two compose instead of fighting over the same channel.
+
+   Distances are small on purpose. The list is 36px rows in a 190px rail;
+   anything larger reads as the sidebar lurching rather than a row
+   settling into place. */
+@keyframes tab-enter {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tab-settle-down { from { transform: translateY(-4px); } to { transform: translateY(0); } }
+@keyframes tab-settle-up   { from { transform: translateY(4px); }  to { transform: translateY(0); } }
+
+.doc-tab.tab-enter { animation: tab-enter 160ms var(--ease); }
+.doc-tab.tab-settle-down { animation: tab-settle-down 170ms var(--ease); }
+.doc-tab.tab-settle-up { animation: tab-settle-up 170ms var(--ease); }
 .doc-tab.active::before {
     content: '';
     position: absolute;
@@ -511,7 +634,8 @@ body {
     line-height: 1;
     cursor: pointer;
     opacity: 0;
-    transition: all var(--t-fast);
+    transition: opacity var(--t-fast), background var(--t-fast),
+                color var(--t-fast), transform var(--t-fast);
 }
 
 .doc-tab:hover .doc-tab-close,
@@ -543,6 +667,9 @@ body {
     gap: 4px;
     flex-direction: column;
     animation: dropdown-in 120ms var(--ease);
+    /* Matches the theme cross-fade on the other chrome surfaces, so the
+       panel does not hard-cut when the theme flips while it is open. */
+    transition: background var(--t-normal), border-color var(--t-normal);
 }
 
 .find-panel.open { display: flex; }
@@ -554,7 +681,11 @@ body {
 }
 
 .replace-row { display: none; padding-top: 4px; }
-.replace-row.open { display: flex; }
+
+/* Fade only — no slide. This row appears *inside* an already-open
+   panel, so translating it would drag the find input above it and
+   look like the whole panel jumped. */
+.replace-row.open { display: flex; animation: fade-in 120ms var(--ease); }
 
 .find-input {
     flex: 1;
@@ -593,7 +724,7 @@ body {
     color: var(--text-2);
     font-size: 11px;
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
     padding: 0 4px;
 }
 
@@ -660,6 +791,13 @@ body {
 @keyframes dropdown-in {
     from { opacity: 0; transform: translateY(-4px); }
     to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Opacity-only entrance, for elements that reveal in place and must
+   not disturb the layout of their siblings. */
+@keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 /* =========================================
@@ -750,7 +888,16 @@ body {
     flex-shrink: 0;
 }
 
-.custom-css-panel.open { display: block; }
+/* Slides down (the opposite of dropdown-in, which rises) so the panel
+   reads as coming *from* the toolbar button that opened it. The 4px
+   travel is deliberately small, so it registers as "settling" rather
+   than as a swoop. */
+.custom-css-panel.open { display: block; animation: panel-drop-in 140ms var(--ease); }
+
+@keyframes panel-drop-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
 .custom-css-panel textarea {
     width: 100%;
@@ -1302,7 +1449,7 @@ body {
     padding: 6px 14px;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
 }
 
 .api-tab:hover { color: var(--text-1); background: var(--btn-ghost-hover); }
@@ -1362,7 +1509,7 @@ body {
     border-radius: 4px;
     padding: 3px 8px;
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition: color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
 }
 
 .api-copy-btn:hover { color: var(--text-1); border-color: var(--accent); }
@@ -1416,6 +1563,23 @@ body {
     .toolbar-center { display: none; }
 
     .workspace { flex-direction: column; }
+
+    /* The workspace main axis is vertical here, so the preview-only
+       collapse must take height, not width. `min-width: 0` from the
+       shared rule is harmless; `min-height: 0` is what actually lets
+       the pane shrink past its content in a column flex container. */
+    .workspace.preview-only .editor-pane,
+    .workspace.preview-only .resize-handle {
+        min-height: 0;
+        height: 0;
+    }
+
+    /* The handle is a full-width horizontal bar on mobile, so it needs
+       an explicit zero height to disappear with the pane. */
+    .workspace.preview-only .resize-handle {
+        border-top-width: 0;
+        border-bottom-width: 0;
+    }
 
     .resize-handle {
         width: 100%;
@@ -1626,4 +1790,44 @@ body {
     .code-block-header { display: none !important; }
     .code-block-wrapper { border: none !important; }
     .code-block-wrapper pre { border-radius: 6px !important; }
+
+    /* Cancel the view-switch animation for print. The preview-only rules
+       above carry `!important` on flex, which would otherwise outrank
+       this block's own `.preview-pane { flex: none }` and re-introduce a
+       growth factor into a pane that must print at a fixed full width.
+       Nothing should animate on paper in any case. */
+    .workspace.view-animating .editor-pane,
+    .workspace.view-animating .resize-handle,
+    .workspace.view-animating .preview-pane,
+    .workspace.preview-only .editor-pane,
+    .workspace.preview-only .resize-handle,
+    .workspace.preview-only .preview-pane {
+        transition: none !important;
+    }
+    .workspace.preview-only .preview-pane { flex: none !important; }
+}
+
+/* =========================================
+   Reduced Motion
+   =========================================
+   Users who ask the OS to reduce motion get every transition and
+   animation collapsed to an instant state change. Duration is zeroed
+   rather than display:none so that :hover / .active / .open rules keep
+   applying normally — the UI stays fully usable, it just stops moving.
+
+   Deliberately NOT scoped away from .markdown-body: any motion there
+   would already be a bug (it is rasterised into PDF/PNG exports), and
+   this block costs nothing on the export path because the properties it
+   touches are the app chrome's, not the document's.
+   ========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
